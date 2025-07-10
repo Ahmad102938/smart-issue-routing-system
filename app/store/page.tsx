@@ -1,0 +1,189 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import MetricsCard from '@/components/dashboard/MetricsCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Ticket, 
+  AlertTriangle, 
+  Clock, 
+  CheckCircle2, 
+  Plus,
+  TrendingUp,
+  Eye
+} from 'lucide-react';
+import { getCurrentUser } from '@/lib/auth';
+import { mockTickets, mockDashboardMetrics } from '@/lib/mockData';
+
+export default function StoreDashboard() {
+  const router = useRouter();
+  const user = getCurrentUser();
+  const [recentTickets, setRecentTickets] = useState(mockTickets.slice(0, 5));
+
+  useEffect(() => {
+    if (!user || user.role !== 'store_register') {
+      router.push('/');
+    }
+  }, [user, router]);
+
+  const handleCreateTicket = () => {
+    router.push('/store/create-ticket');
+  };
+
+  const handleViewAllTickets = () => {
+    router.push('/store/tickets');
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'open': return 'bg-gray-100 text-gray-800';
+      case 'assigned': return 'bg-blue-100 text-blue-800';
+      case 'in_progress': return 'bg-yellow-100 text-yellow-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <DashboardLayout title="Store Dashboard">
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Store Dashboard</h1>
+            <p className="text-gray-600 mt-1">
+              Manage equipment issues and track repair progress
+            </p>
+          </div>
+          <Button 
+            onClick={handleCreateTicket}
+            className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Report New Issue
+          </Button>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricsCard
+            title="Total Tickets"
+            value={mockDashboardMetrics.total_tickets}
+            icon={Ticket}
+            color="blue"
+            trend={{ value: 12, isPositive: true }}
+          />
+          <MetricsCard
+            title="Open Issues"
+            value={mockDashboardMetrics.open_tickets}
+            icon={AlertTriangle}
+            color="yellow"
+            description="Awaiting assignment"
+          />
+          <MetricsCard
+            title="In Progress"
+            value={mockDashboardMetrics.in_progress_tickets}
+            icon={Clock}
+            color="purple"
+            description="Being worked on"
+          />
+          <MetricsCard
+            title="Completed Today"
+            value={mockDashboardMetrics.completed_tickets}
+            icon={CheckCircle2}
+            color="green"
+            trend={{ value: 8, isPositive: true }}
+          />
+        </div>
+
+        {/* SLA Performance */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+              SLA Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-emerald-600">
+                  {mockDashboardMetrics.sla_compliance_rate}%
+                </p>
+                <p className="text-gray-600">SLA Compliance Rate</p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-semibold text-gray-900">
+                  {mockDashboardMetrics.avg_resolution_time}h
+                </p>
+                <p className="text-gray-600">Avg. Resolution Time</p>
+              </div>
+            </div>
+            <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full" 
+                style={{ width: `${mockDashboardMetrics.sla_compliance_rate}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Tickets */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Tickets</CardTitle>
+            <Button variant="outline" onClick={handleViewAllTickets}>
+              <Eye className="h-4 w-4 mr-2" />
+              View All
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentTickets.map((ticket) => (
+                <div key={ticket.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-gray-900">#{ticket.id}</span>
+                      <Badge className={getPriorityColor(ticket.ai_priority)}>
+                        {ticket.ai_priority.toUpperCase()}
+                      </Badge>
+                      <Badge variant="outline" className={getStatusColor(ticket.status)}>
+                        {ticket.status.toUpperCase().replace('_', ' ')}
+                      </Badge>
+                    </div>
+                    <p className="text-gray-700 text-sm line-clamp-1">
+                      {ticket.description}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      📍 {ticket.location_in_store} • {ticket.ai_classification_category}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">
+                      {new Date(ticket.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
+}

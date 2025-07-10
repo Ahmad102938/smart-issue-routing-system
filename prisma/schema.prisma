@@ -1,0 +1,213 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String   @id @default(cuid())
+  username              String   @unique
+  email                 String   @unique
+  password_hash         String
+  phone_number          String?
+  role                  UserRole
+  associated_entity_id  String?
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Relations
+  store                 Store?   @relation("StoreRegister", fields: [associated_entity_id], references: [id], map: "users_associated_entity_id_store_fkey")
+  service_provider      ServiceProvider? @relation("ServiceProviderUser", fields: [associated_entity_id], references: [id], map: "users_associated_entity_id_service_provider_fkey")
+  moderated_stores      Store[]  @relation("StoreModerator")
+  approved_providers    ServiceProvider[] @relation("ServiceProviderApprover")
+  reported_tickets      Ticket[] @relation("TicketReporter")
+  remarks               Remark[]
+  escalated_tickets     Escalation[] @relation("EscalatedTo")
+
+  @@map("users")
+}
+
+model Store {
+  id                    String      @id @default(cuid())
+  name                  String
+  store_id              String      @unique
+  address               String
+  city                  String
+  state                 String
+  zip_code              String
+  location_coordinates  Json        // {latitude: number, longitude: number}
+  legal_info_doc_url    String?
+  status                StoreStatus @default(PENDING_APPROVAL)
+  moderator_user_id     String?
+  created_at            DateTime    @default(now())
+  approved_at           DateTime?
+
+  // Relations
+  moderator             User?       @relation("StoreModerator", fields: [moderator_user_id], references: [id])
+  register_users        User[]      @relation("StoreRegister")
+  tickets               Ticket[]
+
+  @@map("stores")
+}
+
+model ServiceProvider {
+  id                           String                    @id @default(cuid())
+  company_name                 String
+  primary_location_address     String
+  primary_location_coordinates Json                      // {latitude: number, longitude: number}
+  unique_company_id            String                    @unique
+  certification_docs_url       String?
+  skills                       String[]
+  capacity_per_day             Int                       @default(5)
+  current_load                 Int                       @default(0)
+  status                       ServiceProviderStatus     @default(PENDING_APPROVAL)
+  approved_by_moderator_id     String?
+  created_at                   DateTime                  @default(now())
+  approved_at                  DateTime?
+
+  // Relations
+  approved_by                  User?                     @relation("ServiceProviderApprover", fields: [approved_by_moderator_id], references: [id])
+  users                        User[]                    @relation("ServiceProviderUser")
+  assigned_tickets             Ticket[]                  @relation("AssignedProvider")
+  ticket_assignments           TicketAssignment[]
+
+  @@map("service_providers")
+}
+
+model Ticket {
+  id                           String           @id @default(cuid())
+  store_id                     String
+  reporter_user_id             String
+  description                  String
+  qr_asset_id                  String?
+  ai_classification_category   String
+  ai_classification_subcategory String
+  ai_priority                  TicketPriority
+  location_in_store            String
+  status                       TicketStatus     @default(OPEN)
+  assigned_service_provider_id String?
+  sla_deadline                 DateTime
+  created_at                   DateTime         @default(now())
+  assigned_at                  DateTime?
+  accepted_at                  DateTime?
+  completed_at                 DateTime?
+  closed_at                    DateTime?
+
+  // Relations
+  store                        Store            @relation(fields: [store_id], references: [id])
+  reporter                     User             @relation("TicketReporter", fields: [reporter_user_id], references: [id])
+  assigned_provider            ServiceProvider? @relation("AssignedProvider", fields: [assigned_service_provider_id], references: [id])
+  assignments                  TicketAssignment[]
+  remarks                      Remark[]
+  escalations                  Escalation[]
+
+  @@map("tickets")
+}
+
+model TicketAssignment {
+  id                      String                    @id @default(cuid())
+  ticket_id               String
+  service_provider_id     String
+  assignment_sequence     Int
+  assigned_at             DateTime                  @default(now())
+  status                  TicketAssignmentStatus    @default(PROPOSED)
+  accepted_at             DateTime?
+  rejected_at             DateTime?
+  rejection_reason        String?
+  accepted_emp_id         String?
+  accepted_phone_number   String?
+
+  // Relations
+  ticket                  Ticket                    @relation(fields: [ticket_id], references: [id])
+  service_provider        ServiceProvider           @relation(fields: [service_provider_id], references: [id])
+
+  @@map("ticket_assignments")
+}
+
+model Remark {
+  id           String   @id @default(cuid())
+  ticket_id    String
+  user_id      String
+  remark_text  String
+  created_at   DateTime @default(now())
+
+  // Relations
+  ticket       Ticket   @relation(fields: [ticket_id], references: [id])
+  user         User     @relation(fields: [user_id], references: [id])
+
+  @@map("remarks")
+}
+
+model Escalation {
+  id                        String           @id @default(cuid())
+  ticket_id                 String
+  escalation_trigger_event  String
+  triggered_at              DateTime         @default(now())
+  escalated_to_user_id      String
+  status                    EscalationStatus @default(TRIGGERED)
+  resolution_notes          String?
+
+  // Relations
+  ticket                    Ticket           @relation(fields: [ticket_id], references: [id])
+  escalated_to              User             @relation("EscalatedTo", fields: [escalated_to_user_id], references: [id])
+
+  @@map("escalations")
+}
+
+// Enums
+enum UserRole {
+  STORE_REGISTER
+  SERVICE_PROVIDER
+  ADMIN
+  MODERATOR
+}
+
+enum StoreStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DEACTIVATED
+}
+
+enum ServiceProviderStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DEACTIVATED
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  REJECTED_BY_TECH
+  ESCALATED
+  COMPLETED
+  CLOSED
+}
+
+enum TicketPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TicketAssignmentStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum EscalationStatus {
+  TRIGGERED
+  ACKNOWLEDGED
+  RESOLVED
+}
