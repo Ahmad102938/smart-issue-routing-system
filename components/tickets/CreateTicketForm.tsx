@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { QrCode, Camera, AlertTriangle, Clock, CheckCircle } from 'lucide-react';
 import { classifyIssue, calculateSLADeadline } from '@/lib/mockData';
 import { getCurrentUser } from '@/lib/auth';
+import { useRef } from 'react';
 
 export default function CreateTicketForm() {
   const [description, setDescription] = useState('');
@@ -23,6 +24,9 @@ export default function CreateTicketForm() {
   const [submitted, setSubmitted] = useState(false);
   const router = useRouter();
   const user = getCurrentUser();
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDescriptionChange = (value: string) => {
     setDescription(value);
@@ -47,12 +51,28 @@ export default function CreateTicketForm() {
     else if (randomAsset.includes('HVAC')) setLocation('Store Interior');
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files).slice(0, 5);
+    setImages(files);
+    setImagePreviews(files.map(file => URL.createObjectURL(file)));
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const newImages = images.filter((_, i) => i !== index);
+    setImages(newImages);
+    setImagePreviews(newImages.map(file => URL.createObjectURL(file)));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Mock API call
+    // Mock API call, now includes images
     await new Promise(resolve => setTimeout(resolve, 2000));
+    // In real app, upload images to server or cloud storage here
+    // and include their URLs in the ticket payload
 
     setSubmitted(true);
     setIsSubmitting(false);
@@ -103,7 +123,7 @@ export default function CreateTicketForm() {
           Report New Issue
         </CardTitle>
         <CardDescription>
-          Describe the problem you're experiencing and we'll route it to the right technician
+          Describe the problem you&apos;re experiencing and we&apos;ll route it to the right technician
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -157,6 +177,35 @@ export default function CreateTicketForm() {
               onChange={(e) => setLocation(e.target.value)}
               required
             />
+          </div>
+
+          {/* Image Upload */}
+          <div className="space-y-2">
+            <Label htmlFor="images">Attach Images (up to 5)</Label>
+            <Input
+              id="images"
+              type="file"
+              accept="image/*"
+              multiple
+              ref={fileInputRef}
+              onChange={handleImageChange}
+              disabled={images.length >= 5}
+            />
+            <div className="flex flex-wrap gap-2 mt-2">
+              {imagePreviews.map((src, idx) => (
+                <div key={idx} className="relative w-20 h-20 border rounded overflow-hidden">
+                  <img src={src} alt={`Preview ${idx + 1}`} className="object-cover w-full h-full" />
+                  <button
+                    type="button"
+                    className="absolute top-0 right-0 bg-red-500 text-white rounded-bl px-1 text-xs"
+                    onClick={() => handleRemoveImage(idx)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">You can upload up to 5 images. Only image files are allowed.</p>
           </div>
 
           {/* AI Classification Preview */}

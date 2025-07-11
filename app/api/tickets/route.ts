@@ -5,12 +5,20 @@ import { requirePermission } from '@/lib/auth/rbac';
 import { aiOrchestrator } from '@/lib/ai/orchestrator';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { TicketPriority, TicketStatus } from '@prisma/client';
 
 const CreateTicketSchema = z.object({
   description: z.string().min(10).max(1000),
   location_in_store: z.string().min(1).max(100),
   qr_asset_id: z.string().optional()
 });
+
+type TicketWhere = {
+  store_id?: string | { in: string[] };
+  assigned_service_provider_id?: string;
+  status?: TicketStatus;
+  ai_priority?: TicketPriority;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const priority = searchParams.get('priority');
 
-    let whereClause: any = {};
+    let whereClause: TicketWhere = {};
 
     // Apply role-based filtering
     if (session.user.role === 'STORE_REGISTER') {
@@ -76,10 +84,10 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (status && status !== 'all') {
-      whereClause.status = status.toUpperCase();
+      whereClause.status = status.toUpperCase() as TicketStatus;
     }
     if (priority && priority !== 'all') {
-      whereClause.ai_priority = priority.toUpperCase();
+      whereClause.ai_priority = priority.toUpperCase() as TicketPriority;
     }
 
     const tickets = await prisma.ticket.findMany({

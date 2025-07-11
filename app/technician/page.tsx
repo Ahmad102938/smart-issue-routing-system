@@ -21,11 +21,13 @@ import {
 } from 'lucide-react';
 import { getCurrentUser } from '@/lib/auth';
 import { mockTickets, mockServiceProviders } from '@/lib/mockData';
+import { useToast } from '@/hooks/use-toast';
 
 export default function TechnicianDashboard() {
   const router = useRouter();
   const user = getCurrentUser();
   const [capacity, setCapacity] = useState(5);
+  const { toast } = useToast();
   
   // Get current service provider
   const serviceProvider = mockServiceProviders.find(p => p.id === user?.associated_entity_id);
@@ -37,6 +39,27 @@ export default function TechnicianDashboard() {
     t.status === 'completed' && 
     new Date(t.completed_at || '').toDateString() === new Date().toDateString()
   );
+
+  // Load capacity from localStorage if available
+  useEffect(() => {
+    const stored = localStorage.getItem('technician_capacity');
+    if (stored) setCapacity(Number(stored));
+  }, []);
+
+  const [pendingCapacity, setPendingCapacity] = useState(capacity);
+
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPendingCapacity(Number(e.target.value));
+  };
+
+  const handleUpdateCapacity = () => {
+    setCapacity(pendingCapacity);
+    localStorage.setItem('technician_capacity', String(pendingCapacity));
+    toast({
+      title: 'Capacity Updated',
+      description: `Your daily capacity is now set to ${pendingCapacity} tickets.`,
+    });
+  };
 
   useEffect(() => {
     if (!user || user.role !== 'service_provider') {
@@ -134,8 +157,8 @@ export default function TechnicianDashboard() {
                 <Input
                   id="capacity"
                   type="number"
-                  value={capacity}
-                  onChange={(e) => setCapacity(Number(e.target.value))}
+                  value={pendingCapacity}
+                  onChange={handleCapacityChange}
                   min="1"
                   max="20"
                 />
@@ -157,7 +180,12 @@ export default function TechnicianDashboard() {
                 </div>
               </div>
 
-              <Button variant="outline" className="w-full">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={handleUpdateCapacity}
+                disabled={pendingCapacity === capacity}
+              >
                 Update Capacity
               </Button>
             </CardContent>

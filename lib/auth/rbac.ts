@@ -2,6 +2,7 @@ import { UserRole } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { authOptions } from './config';
 import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 export interface Permission {
   resource: string;
@@ -20,9 +21,9 @@ export const PERMISSIONS: Record<UserRole, Permission[]> = {
   [UserRole.SERVICE_PROVIDER]: [
     { resource: 'ticket', action: 'read', conditions: { assigned_to_self: true } },
     { resource: 'ticket', action: 'update', conditions: { assigned_to_self: true } },
-    { resource: 'ticket', action: 'accept' },
-    { resource: 'ticket', action: 'reject' },
-    { resource: 'ticket', action: 'complete' },
+    { resource: 'ticket', action: 'accept', conditions: { assigned_to_self: true } },
+    { resource: 'ticket', action: 'reject', conditions: { assigned_to_self: true } },
+    { resource: 'ticket', action: 'complete', conditions: { assigned_to_self: true } },
     { resource: 'remark', action: 'create', conditions: { assigned_to_self: true } },
     { resource: 'profile', action: 'read' },
     { resource: 'profile', action: 'update' },
@@ -102,4 +103,13 @@ export async function requirePermission(
   }
 
   return user;
+}
+
+export async function getTicketContext(ticketId: string, user: any) {
+  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  if (!ticket) return {};
+  return {
+    assigned_to_self: ticket.assigned_service_provider_id === user.associated_entity_id,
+    own_store: ticket.store_id === user.associated_entity_id
+  };
 }

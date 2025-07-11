@@ -22,6 +22,7 @@ import {
 import { Ticket } from '@/types';
 import { mockStores, mockServiceProviders, mockRemarks } from '@/lib/mockData';
 import { getCurrentUser } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
 
 interface TicketDetailProps {
   ticket: Ticket;
@@ -32,6 +33,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const [newRemark, setNewRemark] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = getCurrentUser();
+  const { toast } = useToast();
 
   const store = mockStores.find(s => s.id === ticket.store_id);
   const provider = mockServiceProviders.find(p => p.id === ticket.assigned_service_provider_id);
@@ -47,6 +49,18 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     // In a real app, this would add to the database
     setNewRemark('');
     setIsSubmitting(false);
+    if (user?.role === 'store_register') {
+      toast({
+        title: 'New Remark Added',
+        description: 'A new remark has been added to your ticket.',
+      });
+    }
+    if (user?.role === 'service_provider') {
+      toast({
+        title: 'Remark Added',
+        description: 'Your remark has been added to the ticket.',
+      });
+    }
   };
 
   const handleAcceptTicket = async () => {
@@ -55,6 +69,18 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     // In real app, would update ticket status
+    if (user?.role === 'store_register') {
+      toast({
+        title: 'Ticket Accepted',
+        description: 'Your ticket has been accepted by a technician.',
+      });
+    }
+    if (user?.role === 'service_provider') {
+      toast({
+        title: 'Ticket Accepted',
+        description: 'You have accepted this ticket assignment.',
+      });
+    }
   };
 
   const handleRejectTicket = async () => {
@@ -62,6 +88,18 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     // Mock API call for rejecting ticket
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsSubmitting(false);
+    if (user?.role === 'store_register') {
+      toast({
+        title: 'Ticket Rejected',
+        description: 'Your ticket was rejected by the technician.',
+      });
+    }
+    if (user?.role === 'service_provider') {
+      toast({
+        title: 'Ticket Rejected',
+        description: 'You have rejected this ticket assignment.',
+      });
+    }
   };
 
   const handleCompleteTicket = async () => {
@@ -69,6 +107,18 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     // Mock API call for completing ticket
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsSubmitting(false);
+    if (user?.role === 'store_register') {
+      toast({
+        title: 'Ticket Completed',
+        description: 'Your ticket has been marked as completed.',
+      });
+    }
+    if (user?.role === 'service_provider') {
+      toast({
+        title: 'Ticket Completed',
+        description: 'You have marked this ticket as completed.',
+      });
+    }
   };
 
   const getStatusColor = (status: string) => {

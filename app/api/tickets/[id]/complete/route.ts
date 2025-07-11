@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/config';
 import { requirePermission } from '@/lib/auth/rbac';
 import { aiOrchestrator } from '@/lib/ai/orchestrator';
+import { getTicketContext } from '@/lib/auth/rbac';
 
 export async function POST(
   request: NextRequest,
@@ -15,7 +16,8 @@ export async function POST(
     }
 
     // Check permissions
-    await requirePermission('ticket', 'complete');
+    const context = await getTicketContext(params.id, session.user);
+    await requirePermission('ticket', 'complete', context);
 
     await aiOrchestrator.handleTicketCompletion(
       params.id,

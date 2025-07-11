@@ -2,17 +2,33 @@ import { StateGraph, END } from '@langchain/langgraph';
 import { prisma } from '@/lib/prisma';
 import { TicketStatus, TicketPriority } from '@prisma/client';
 
-interface EscalationState {
-  tickets?: any[];
-  escalations?: any[];
-  error?: string;
+interface Ticket {
+  id: string;
+  status: string;
+  ai_priority: string;
+  sla_deadline: Date;
+  created_at: Date;
+  assigned_at?: Date | null;
+  accepted_at?: Date | null;
+  store: { moderator?: { id: string } | null };
 }
-
+interface Escalation {
+  ticket_id: string;
+  trigger_event: string;
+  escalated_to_user_id?: string;
+  priority: string;
+}
 interface SLARule {
-  priority: TicketPriority;
+  priority: string;
   assignmentTimeoutMinutes: number;
   acceptanceTimeoutMinutes: number;
   resolutionTimeoutHours: number;
+}
+
+interface EscalationState {
+  tickets?: Ticket[];
+  escalations?: Escalation[];
+  error?: string;
 }
 
 export class EscalationAgent {
@@ -55,7 +71,7 @@ export class EscalationAgent {
     graph.addNode('checkSLAViolations', async (state: EscalationState) => {
       try {
         const now = new Date();
-        const escalations: any[] = [];
+        const escalations: Escalation[] = [];
 
         // Get all active tickets
         const tickets = await prisma.ticket.findMany({
@@ -102,17 +118,17 @@ export class EscalationAgent {
     });
 
     // Set entry point and edges
-    graph.setEntryPoint('checkSLAViolations');
-    graph.addEdge('checkSLAViolations', END);
+    graph.setEntryPoint('checkSLAViolations' as any);
+    graph.addEdge('checkSLAViolations' as any, END);
 
     return graph;
   }
 
-  private checkTicketSLA(ticket: any, rule: SLARule, now: Date): any[] {
-    const escalations: any[] = [];
-    const createdAt = new Date(ticket.created_at);
-    const assignedAt = ticket.assigned_at ? new Date(ticket.assigned_at) : null;
-    const acceptedAt = ticket.accepted_at ? new Date(ticket.accepted_at) : null;
+  private checkTicketSLA(ticket: Ticket, rule: SLARule, now: Date): Escalation[] {
+    const escalations: Escalation[] = [];
+    const createdAt = ticket.created_at;
+    const assignedAt = ticket.assigned_at;
+    const acceptedAt = ticket.accepted_at;
 
     // Check assignment timeout
     if (ticket.status === 'OPEN') {
@@ -121,7 +137,7 @@ export class EscalationAgent {
         escalations.push({
           ticket_id: ticket.id,
           trigger_event: `Assignment timeout: ${rule.assignmentTimeoutMinutes} minutes exceeded`,
-          escalated_to_user_id: ticket.store.moderator?.id || null,
+          escalated_to_user_id: ticket.store.moderator?.id || undefined,
           priority: ticket.ai_priority
         });
       }
@@ -134,7 +150,7 @@ export class EscalationAgent {
         escalations.push({
           ticket_id: ticket.id,
           trigger_event: `Acceptance timeout: ${rule.acceptanceTimeoutMinutes} minutes exceeded`,
-          escalated_to_user_id: ticket.store.moderator?.id || null,
+          escalated_to_user_id: ticket.store.moderator?.id || undefined,
           priority: ticket.ai_priority
         });
       }
@@ -147,19 +163,19 @@ export class EscalationAgent {
         escalations.push({
           ticket_id: ticket.id,
           trigger_event: `Resolution timeout: ${rule.resolutionTimeoutHours} hours exceeded`,
-          escalated_to_user_id: ticket.store.moderator?.id || null,
+          escalated_to_user_id: ticket.store.moderator?.id || undefined,
           priority: ticket.ai_priority
         });
       }
     }
 
     // Check SLA deadline
-    const slaDeadline = new Date(ticket.sla_deadline);
+    const slaDeadline = ticket.sla_deadline;
     if (now > slaDeadline && ticket.status !== 'COMPLETED') {
       escalations.push({
         ticket_id: ticket.id,
-        trigger_event: 'SLA deadline exceeded',
-        escalated_to_user_id: ticket.store.moderator?.id || null,
+        trigger_event: `SLA deadline exceeded`,
+        escalated_to_user_id: ticket.store.moderator?.id || undefined,
         priority: ticket.ai_priority
       });
     }
@@ -167,29 +183,14 @@ export class EscalationAgent {
     return escalations;
   }
 
-  private async createEscalation(escalationData: any): Promise<void> {
+  private async createEscalation(escalationData: Escalation): Promise<void> {
     try {
       // Check if escalation already exists for this ticket and trigger
-      const existingEscalation = await prisma.escalation.findFirst({
-        where: {
-          ticket_id: escalationData.ticket_id,
-          escalation_trigger_event: escalationData.trigger_event,
-          status: {
-            in: ['TRIGGERED', 'ACKNOWLEDGED']
-          }
-        }
-      });
-
-      if (existingEscalation) {
-        return; // Don't create duplicate escalations
-      }
-
-      // Create escalation
       await prisma.escalation.create({
         data: {
           ticket_id: escalationData.ticket_id,
           escalation_trigger_event: escalationData.trigger_event,
-          escalated_to_user_id: escalationData.escalated_to_user_id,
+          escalated_to_user_id: escalationData.escalated_to_user_id || '',
           status: 'TRIGGERED'
         }
       });

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth/config';
 import { requirePermission } from '@/lib/auth/rbac';
 import { aiOrchestrator } from '@/lib/ai/orchestrator';
 import { z } from 'zod';
+import { getTicketContext } from '@/lib/auth/rbac';
 
 const RejectTicketSchema = z.object({
   reason: z.string().min(5).max(200)
@@ -20,7 +21,8 @@ export async function POST(
     }
 
     // Check permissions
-    await requirePermission('ticket', 'reject');
+    const context = await getTicketContext(params.id, session.user);
+    await requirePermission('ticket', 'reject', context);
 
     const body = await request.json();
     const validatedData = RejectTicketSchema.parse(body);

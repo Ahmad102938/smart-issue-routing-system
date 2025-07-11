@@ -10,6 +10,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                    String   @id @default(cuid())
   username              String   @unique
@@ -30,8 +36,24 @@ model User {
   reported_tickets      Ticket[] @relation("TicketReporter")
   remarks               Remark[]
   escalated_tickets     Escalation[] @relation("EscalatedTo")
+  registration_status   UserRegistrationStatus @default(PENDING)
+  temp_password_hash    String?
+  force_password_change Boolean                @default(false)
+  documents             Document[]
 
   @@map("users")
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  url       String
+  type      String
+  userId    String
+  uploadedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("documents")
 }
 
 model Store {
