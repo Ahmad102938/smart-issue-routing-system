@@ -42,10 +42,37 @@ export default function AdminDashboard() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [userMsg, setUserMsg] = useState("");
 
+  // Moderator Management State
+  const [moderators, setModerators] = useState<any[]>([]);
+  const [loadingModerators, setLoadingModerators] = useState(false);
+  const [moderatorMsg, setModeratorMsg] = useState("");
+  const [showModeratorForm, setShowModeratorForm] = useState(false);
+  const [moderatorForm, setModeratorForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    store_id: ''
+  });
+
+  // Approved Stores State (for moderator assignment)
+  const [approvedStoresForModerator, setApprovedStoresForModerator] = useState<any[]>([]);
+  const [loadingApprovedStores, setLoadingApprovedStores] = useState(false);
+
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
-      router.push('/');
+    console.log('Current user:', user);
+    if (!user) {
+      console.log('No user found, redirecting to signin');
+      router.push('/auth/signin');
+      return;
     }
+    
+    if ((user.role as string) !== 'ADMIN') {
+      console.log('User is not admin, redirecting to home');
+      router.push('/');
+      return;
+    }
+    
+    console.log('User is admin, proceeding to dashboard');
   }, [user, router]);
 
   useEffect(() => {
@@ -115,6 +142,53 @@ export default function AdminDashboard() {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    async function fetchModerators() {
+      setLoadingModerators(true);
+      const res = await fetch('/api/auth/moderator');
+      let data = [];
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = [];
+      }
+      if (!res.ok) {
+        setModerators([]);
+        setLoadingModerators(false);
+        return;
+      }
+      setModerators(data);
+      setLoadingModerators(false);
+    }
+    fetchModerators();
+  }, []);
+
+  useEffect(() => {
+    async function fetchApprovedStores() {
+      setLoadingApprovedStores(true);
+      try {
+        // Fetch all stores from the database
+        const res = await fetch('/api/stores');
+        if (res.ok) {
+          const stores = await res.json();
+          // Filter for approved stores that don't have a moderator assigned
+          const approved = stores.filter((store: any) => 
+            store.status === 'APPROVED' && !store.moderator_user_id
+          );
+          setApprovedStoresForModerator(approved);
+        } else {
+          setApprovedStoresForModerator([]);
+        }
+      } catch (error) {
+        console.error('Error fetching approved stores:', error);
+        setApprovedStoresForModerator([]);
+      } finally {
+        setLoadingApprovedStores(false);
+      }
+    }
+    fetchApprovedStores();
+  }, []);
+
   function addAuditTrail(action: string, details: string) {
     const entry = {
       timestamp: new Date().toISOString(),
@@ -144,6 +218,27 @@ export default function AdminDashboard() {
       addAuditTrail(`Store ${action}`, `Store userId: ${userId}`);
     } else {
       setActionMsg(data.error || 'Action failed.');
+    }
+  }
+
+  async function handleProviderAction(userId: string, action: 'APPROVE' | 'REJECT') {
+    setProviderMsg('');
+    const res = await fetch('/api/auth/register', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setProviderMsg(`Provider ${action === 'APPROVE' ? 'approved' : 'rejected'} successfully.`);
+      setProviders(providers.filter(p => p.id !== userId));
+      toast({
+        title: `Provider ${action === 'APPROVE' ? 'Approved' : 'Rejected'}`,
+        description: `Provider registration has been ${action === 'APPROVE' ? 'approved' : 'rejected'}.`,
+      });
+      addAuditTrail(`Provider ${action}`, `Provider userId: ${userId}`);
+    } else {
+      setProviderMsg(data.error || 'Action failed.');
     }
   }
 
@@ -189,8 +284,105 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCreateModerator() {
+    if (!moderatorForm.username || !moderatorForm.email || !moderatorForm.password || !moderatorForm.store_id) {
+      setModeratorMsg('All fields are required');
+      return;
+    }
+
+    setModeratorMsg('');
+    const res = await fetch('/api/auth/moderator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...moderatorForm,
+        admin_user_id: user?.id
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setModeratorMsg('Moderator created successfully');
+      setModeratorForm({ username: '', email: '', password: '', store_id: '' });
+      setShowModeratorForm(false);
+      // Refresh moderators list
+      const moderatorsRes = await fetch('/api/auth/moderator');
+      if (moderatorsRes.ok) {
+        const moderatorsData = await moderatorsRes.json();
+        setModerators(moderatorsData);
+      }
+      toast({
+        title: 'Moderator Created',
+        description: 'New moderator has been created and assigned to store.',
+      });
+      addAuditTrail('Moderator Created', `Moderator: ${moderatorForm.username}, Store: ${moderatorForm.store_id}`);
+    } else {
+      setModeratorMsg(data.error || 'Failed to create moderator');
+    }
+  }
+
+  async function handleModeratorStatus(moderatorId: string, isActive: boolean) {
+    setModeratorMsg('');
+    const res = await fetch('/api/auth/moderator', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        moderator_id: moderatorId, 
+        action: isActive ? 'DEACTIVATE' : 'ACTIVATE' 
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setModeratorMsg(`Moderator ${isActive ? 'deactivated' : 'activated'} successfully`);
+      setModerators(moderators.map(m => m.id === moderatorId ? { ...m, is_active: !isActive } : m));
+      toast({
+        title: `Moderator ${isActive ? 'Deactivated' : 'Activated'}`,
+        description: `Moderator has been ${isActive ? 'deactivated' : 'activated'}.`,
+      });
+      addAuditTrail(`Moderator ${isActive ? 'Deactivated' : 'Activated'}`, `Moderator ID: ${moderatorId}`);
+    } else {
+      setModeratorMsg(data.error || 'Action failed');
+    }
+  }
+
+  async function handleRemoveModeratorFromStore(moderatorId: string) {
+    if (!window.confirm('Are you sure you want to remove this moderator from their assigned store?')) {
+      return;
+    }
+
+    setModeratorMsg('');
+    const res = await fetch('/api/auth/moderator', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        moderator_id: moderatorId, 
+        action: 'REMOVE_STORE' 
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setModeratorMsg('Moderator removed from store successfully');
+      // Refresh moderators list
+      const moderatorsRes = await fetch('/api/auth/moderator');
+      if (moderatorsRes.ok) {
+        const moderatorsData = await moderatorsRes.json();
+        setModerators(moderatorsData);
+      }
+      toast({
+        title: 'Moderator Removed',
+        description: 'Moderator has been removed from their assigned store.',
+      });
+      addAuditTrail('Moderator Removed from Store', `Moderator ID: ${moderatorId}`);
+    } else {
+      setModeratorMsg(data.error || 'Action failed');
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    router.push('/auth/signin');
+  };
+
   const totalStores = mockStores.length;
-  const approvedStores = mockStores.filter(s => s.status === 'approved').length;
   const totalProviders = mockServiceProviders.length;
   const approvedProviders = mockServiceProviders.filter(p => p.status === 'approved').length;
   const totalTickets = mockTickets.length;
@@ -251,11 +443,24 @@ export default function AdminDashboard() {
     <DashboardLayout title="Admin Dashboard">
       <div className="space-y-8">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">System Overview</h1>
-          <p className="text-gray-600 mt-1">
-            Global monitoring and management across all stores
-          </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">System Overview</h1>
+            <p className="text-gray-600 mt-1">
+              Global monitoring and management across all stores
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">
+              Welcome, {user?.username}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* System Metrics */}
@@ -263,7 +468,7 @@ export default function AdminDashboard() {
           <MetricsCard
             title="Total Stores"
             value={totalStores}
-            description={`${approvedStores} approved`}
+            description={`${approvedStoresForModerator.length} approved`}
             icon={Building2}
             color="blue"
           />
@@ -510,11 +715,15 @@ export default function AdminDashboard() {
                     <div className="text-sm text-gray-600">Registered by: {storeUser.username} ({storeUser.email})</div>
                     <div className="text-sm text-gray-600">Legal Docs:</div>
                     <ul className="ml-4 list-disc">
-                      {storeUser.documents.map((doc: any) => (
-                        <li key={doc.id}>
-                          <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{doc.type}</a>
-                        </li>
-                      ))}
+                      {storeUser.documents && storeUser.documents.length > 0 ? (
+                        storeUser.documents.map((doc: any) => (
+                          <li key={doc.id}>
+                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{doc.type}</a>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500">No documents uploaded</li>
+                      )}
                     </ul>
                   </div>
                   <div className="flex gap-2">
@@ -538,31 +747,77 @@ export default function AdminDashboard() {
           {actionMsg && <div className="mt-2 text-sm text-blue-700">{actionMsg}</div>}
         </div>
 
-        {/* Service Provider Management */}
+        {/* Pending Service Provider Registrations */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Service Provider Management</h2>
+          <h2 className="text-2xl font-bold mb-4">Pending Service Provider Registrations</h2>
           {loadingProviders ? (
             <div>Loading...</div>
-          ) : providers.length === 0 ? (
-            <div className="text-gray-500">No service providers found.</div>
+          ) : providers.filter((p: any) => p.registration_status === 'PENDING').length === 0 ? (
+            <div className="text-gray-500">No pending service provider registrations.</div>
           ) : (
             <div className="space-y-4">
-              {providers.map(provider => (
+              {providers.filter((p: any) => p.registration_status === 'PENDING').map(provider => (
                 <div key={provider.id} className="border rounded p-4 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
                     <div className="font-semibold">{provider.service_provider?.company_name}</div>
                     <div className="text-sm text-gray-600">Company ID: {provider.service_provider?.unique_company_id}</div>
                     <div className="text-sm text-gray-600">Location: {provider.service_provider?.primary_location_address}</div>
                     <div className="text-sm text-gray-600">Registered by: {provider.username} ({provider.email})</div>
-                    <div className="text-sm text-gray-600">Status: <span className={`font-semibold ${provider.is_active ? 'text-green-600' : 'text-red-600'}`}>{provider.is_active ? 'Active' : 'Inactive'}</span> | <span className="font-semibold">{provider.registration_status}</span></div>
-                    <div className="text-sm text-gray-600">Docs:</div>
+                    <div className="text-sm text-gray-600">Skills: {provider.service_provider?.skills?.join(', ')}</div>
+                    <div className="text-sm text-gray-600">Capacity: {provider.service_provider?.capacity_per_day} tickets/day</div>
+                    <div className="text-sm text-gray-600">Documents:</div>
                     <ul className="ml-4 list-disc">
-                      {provider.documents.map((doc: any) => (
-                        <li key={doc.id}>
-                          <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{doc.type}</a>
-                        </li>
-                      ))}
+                      {provider.documents && provider.documents.length > 0 ? (
+                        provider.documents.map((doc: any) => (
+                          <li key={doc.id}>
+                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{doc.type}</a>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500">No documents uploaded</li>
+                      )}
                     </ul>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700"
+                      onClick={() => handleProviderAction(provider.id, 'APPROVE')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700"
+                      onClick={() => handleProviderAction(provider.id, 'REJECT')}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {providerMsg && <div className="mt-2 text-sm text-blue-700">{providerMsg}</div>}
+        </div>
+
+        {/* Active Service Provider Management */}
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Active Service Provider Management</h2>
+          {loadingProviders ? (
+            <div>Loading...</div>
+          ) : providers.filter((p: any) => p.registration_status === 'APPROVED').length === 0 ? (
+            <div className="text-gray-500">No active service providers found.</div>
+          ) : (
+            <div className="space-y-4">
+              {providers.filter((p: any) => p.registration_status === 'APPROVED').map(provider => (
+                <div key={provider.id} className="border rounded p-4 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="font-semibold">{provider.service_provider?.company_name}</div>
+                    <div className="text-sm text-gray-600">Company ID: {provider.service_provider?.unique_company_id}</div>
+                    <div className="text-sm text-gray-600">Location: {provider.service_provider?.primary_location_address}</div>
+                    <div className="text-sm text-gray-600">Registered by: {provider.username} ({provider.email})</div>
+                    <div className="text-sm text-gray-600">Status: <span className={`font-semibold ${provider.is_active ? 'text-green-600' : 'text-red-600'}`}>{provider.is_active ? 'Active' : 'Inactive'}</span></div>
+                    <div className="text-sm text-gray-600">Skills: {provider.service_provider?.skills?.join(', ')}</div>
+                    <div className="text-sm text-gray-600">Capacity: {provider.service_provider?.capacity_per_day} tickets/day</div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -577,6 +832,126 @@ export default function AdminDashboard() {
             </div>
           )}
           {providerMsg && <div className="mt-2 text-sm text-blue-700">{providerMsg}</div>}
+        </div>
+
+        {/* Moderator Management */}
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Moderator Management</h2>
+          <div className="mb-4">
+            <button
+              onClick={() => setShowModeratorForm(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700"
+            >
+              Create New Moderator
+            </button>
+          </div>
+          
+          {/* Moderator Creation Form */}
+          {showModeratorForm && (
+            <div className="border rounded p-6 bg-gray-50 mb-6">
+              <h3 className="text-lg font-semibold mb-4">Create New Moderator</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Username</label>
+                  <input
+                    type="text"
+                    value={moderatorForm.username}
+                    onChange={(e) => setModeratorForm({...moderatorForm, username: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    placeholder="Enter username"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={moderatorForm.email}
+                    onChange={(e) => setModeratorForm({...moderatorForm, email: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    placeholder="Enter email"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={moderatorForm.password}
+                    onChange={(e) => setModeratorForm({...moderatorForm, password: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    placeholder="Enter password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Assign to Store</label>
+                  <select
+                    value={moderatorForm.store_id}
+                    onChange={(e) => setModeratorForm({...moderatorForm, store_id: e.target.value})}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="">Select a store</option>
+                    {approvedStoresForModerator.map((store: any) => (
+                      <option key={store.id} value={store.store_id}>
+                        {store.name} ({store.store_id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleCreateModerator}
+                  className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700"
+                >
+                  Create Moderator
+                </button>
+                <button
+                  onClick={() => setShowModeratorForm(false)}
+                  className="bg-gray-600 text-white px-4 py-2 rounded font-semibold hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+              {moderatorMsg && <div className="mt-2 text-sm text-blue-700">{moderatorMsg}</div>}
+            </div>
+          )}
+
+          {/* Existing Moderators */}
+          <div className="space-y-4">
+            {moderators.map(moderator => (
+              <div key={moderator.id} className="border rounded p-4 bg-white">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-semibold">{moderator.username}</div>
+                    <div className="text-sm text-gray-600">{moderator.email}</div>
+                    <div className="text-sm text-gray-600">
+                      Status: <span className={`font-semibold ${moderator.is_active ? 'text-green-600' : 'text-red-600'}`}>
+                        {moderator.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Assigned Store: {moderator.moderated_stores?.[0]?.name || 'No store assigned'}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className={`px-3 py-1 rounded font-semibold ${moderator.is_active ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                      onClick={() => handleModeratorStatus(moderator.id, moderator.is_active)}
+                    >
+                      {moderator.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    {moderator.moderated_stores?.[0] && (
+                      <button
+                        className="bg-yellow-600 text-white px-3 py-1 rounded font-semibold hover:bg-yellow-700"
+                        onClick={() => handleRemoveModeratorFromStore(moderator.id)}
+                      >
+                        Remove from Store
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* User Management */}

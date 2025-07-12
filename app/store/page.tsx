@@ -25,9 +25,20 @@ export default function StoreDashboard() {
   const [recentTickets, setRecentTickets] = useState(mockTickets.slice(0, 5));
 
   useEffect(() => {
-    if (!user || user.role !== 'store_register') {
-      router.push('/');
+    console.log('Store dashboard - Current user:', user);
+    if (!user) {
+      console.log('No user found, redirecting to signin');
+      router.push('/auth/signin');
+      return;
     }
+    
+    if ((user.role as string) !== 'STORE_REGISTER') {
+      console.log('User is not store register, redirecting to home');
+      router.push('/');
+      return;
+    }
+    
+    console.log('User is store register, proceeding to dashboard');
   }, [user, router]);
 
   const handleCreateTicket = () => {
@@ -36,6 +47,11 @@ export default function StoreDashboard() {
 
   const handleViewAllTickets = () => {
     router.push('/store/tickets');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    router.push('/auth/signin');
   };
 
   const getStatusColor = (status: string) => {
@@ -70,13 +86,25 @@ export default function StoreDashboard() {
               Manage equipment issues and track repair progress
             </p>
           </div>
-          <Button 
-            onClick={handleCreateTicket}
-            className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Report New Issue
-          </Button>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">
+              Welcome, {user?.username}
+            </span>
+            <Button 
+              onClick={handleCreateTicket}
+              className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Report New Issue
+            </Button>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50"
+            >
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Metrics Grid */}

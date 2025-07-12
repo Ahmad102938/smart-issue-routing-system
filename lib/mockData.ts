@@ -7,7 +7,7 @@ export const mockUsers: User[] = [
     username: 'dallas_store_001',
     email: 'manager@walmart-dallas.com',
     phone_number: '+1-555-0101',
-    role: 'store_register',
+    role: 'STORE_REGISTER',
     associated_entity_id: '1',
     is_active: true,
     created_at: '2024-01-15T08:00:00Z',
@@ -18,7 +18,7 @@ export const mockUsers: User[] = [
     username: 'tech_john_doe',
     email: 'john@techservices.com',
     phone_number: '+1-555-0201',
-    role: 'service_provider',
+    role: 'SERVICE_PROVIDER',
     associated_entity_id: '1',
     is_active: true,
     created_at: '2024-01-10T09:00:00Z',
@@ -29,7 +29,7 @@ export const mockUsers: User[] = [
     username: 'admin_sarah',
     email: 'sarah@walmart.com',
     phone_number: '+1-555-0301',
-    role: 'admin',
+    role: 'ADMIN',
     is_active: true,
     created_at: '2024-01-01T10:00:00Z',
     updated_at: '2024-01-01T10:00:00Z'
@@ -39,7 +39,7 @@ export const mockUsers: User[] = [
     username: 'mod_dallas',
     email: 'moderator@walmart-dallas.com',
     phone_number: '+1-555-0401',
-    role: 'moderator',
+    role: 'MODERATOR',
     associated_entity_id: '1',
     is_active: true,
     created_at: '2024-01-05T11:00:00Z',
@@ -58,7 +58,7 @@ export const mockStores: Store[] = [
     state: 'TX',
     zip_code: '75201',
     location_coordinates: { latitude: 32.7767, longitude: -96.7970 },
-    status: 'approved',
+    status: 'APPROVED',
     moderator_user_id: '4',
     created_at: '2024-01-15T08:00:00Z',
     approved_at: '2024-01-15T12:00:00Z'
@@ -72,7 +72,7 @@ export const mockStores: Store[] = [
     state: 'TX',
     zip_code: '78701',
     location_coordinates: { latitude: 30.2672, longitude: -97.7431 },
-    status: 'approved',
+    status: 'APPROVED',
     created_at: '2024-01-20T09:00:00Z',
     approved_at: '2024-01-20T14:00:00Z'
   }
@@ -89,7 +89,7 @@ export const mockServiceProviders: ServiceProvider[] = [
     skills: ['Refrigeration', 'HVAC', 'POS Systems', 'Electrical'],
     capacity_per_day: 5,
     current_load: 2,
-    status: 'approved',
+    status: 'APPROVED',
     approved_by_moderator_id: '4',
     created_at: '2024-01-10T09:00:00Z',
     approved_at: '2024-01-10T15:00:00Z'
@@ -103,7 +103,7 @@ export const mockServiceProviders: ServiceProvider[] = [
     skills: ['Plumbing', 'Electrical', 'General Maintenance'],
     capacity_per_day: 8,
     current_load: 1,
-    status: 'approved',
+    status: 'APPROVED',
     approved_by_moderator_id: '4',
     created_at: '2024-01-12T10:00:00Z',
     approved_at: '2024-01-12T16:00:00Z'

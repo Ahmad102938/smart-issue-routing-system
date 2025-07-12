@@ -14,7 +14,7 @@ const stepsByRole: Record<string, string[]> = {
 export default function RegisterRolePage() {
   const router = useRouter();
   const params = useParams();
-  const role = params.role as string;
+  const role = (params?.role as string) || '';
 
   // All hooks must be called unconditionally
   const [form, setForm] = useState<any>({});
@@ -109,7 +109,9 @@ export default function RegisterRolePage() {
           formData.append(key, String(value));
         }
       });
-      formData.append('type', role);
+      // Map role to correct type for API
+      const apiType = role === 'provider' ? 'service_provider' : role;
+      formData.append('type', apiType);
       files.forEach((file) => formData.append('documents', file));
       console.log(formData);
       const res = await fetch('/api/auth/register', {

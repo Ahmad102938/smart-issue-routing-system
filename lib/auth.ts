@@ -29,8 +29,13 @@ export const getCurrentUser = (): User | null => {
   if (typeof window !== 'undefined') {
     const stored = localStorage.getItem('currentUser');
     if (stored) {
-      currentUser = JSON.parse(stored);
-      return currentUser;
+      try {
+        currentUser = JSON.parse(stored);
+        return currentUser;
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem('currentUser');
+      }
     }
   }
   

@@ -36,3 +36,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# debug
+create-admin-manual.js  
+
+# guide
+MODERATOR_GUIDE.md
+SERVICE_PROVIDER_GUIDE.md

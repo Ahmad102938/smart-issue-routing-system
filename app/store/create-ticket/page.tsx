@@ -11,8 +11,14 @@ export default function CreateTicketPage() {
   const user = getCurrentUser();
 
   useEffect(() => {
-    if (!user || user.role !== 'store_register') {
+    if (!user) {
+      router.push('/auth/signin');
+      return;
+    }
+    
+    if ((user.role as string) !== 'STORE_REGISTER') {
       router.push('/');
+      return;
     }
   }, [user, router]);
 

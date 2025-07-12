@@ -14,7 +14,7 @@ export default function TechnicianTicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'service_provider') {
+    if (!user || user.role !== 'SERVICE_PROVIDER') {
       router.push('/');
     }
   }, [user, router]);

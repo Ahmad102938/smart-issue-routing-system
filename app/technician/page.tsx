@@ -29,11 +29,11 @@ export default function TechnicianDashboard() {
   const [capacity, setCapacity] = useState(5);
   const { toast } = useToast();
   
-  // Get current service provider
-  const serviceProvider = mockServiceProviders.find(p => p.id === user?.associated_entity_id);
+  // Get current service provider from user data or mock data
+  const serviceProvider = user?.service_provider || mockServiceProviders.find(p => p.id === user?.associated_provider_id);
   
   // Filter tickets for this technician
-  const myTickets = mockTickets.filter(t => t.assigned_service_provider_id === user?.associated_entity_id);
+  const myTickets = mockTickets.filter(t => t.assigned_service_provider_id === user?.associated_provider_id || user?.service_provider?.id);
   const inProgressTickets = myTickets.filter(t => t.status === 'in_progress');
   const completedToday = myTickets.filter(t => 
     t.status === 'completed' && 
@@ -62,13 +62,31 @@ export default function TechnicianDashboard() {
   };
 
   useEffect(() => {
-    if (!user || user.role !== 'service_provider') {
-      router.push('/');
+    console.log('Technician page - Current user:', user);
+    console.log('Technician page - Service provider:', serviceProvider);
+    
+    if (!user) {
+      console.log('No user found, redirecting to signin');
+      router.push('/auth/signin');
+      return;
     }
-  }, [user, router]);
+    
+    if (user.role !== 'SERVICE_PROVIDER') {
+      console.log('User is not service provider, redirecting to home');
+      router.push('/');
+      return;
+    }
+    
+    console.log('User is service provider, proceeding to dashboard');
+  }, [user, router, serviceProvider]);
 
   const handleViewTickets = () => {
     router.push('/technician/tickets');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    router.push('/auth/signin');
   };
 
   const getStatusColor = (status: string) => {
@@ -89,7 +107,33 @@ export default function TechnicianDashboard() {
     }
   };
 
-  if (!user || !serviceProvider) return null;
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
+          <p>Please wait while we load your dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!serviceProvider) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Service Provider Not Found</h1>
+          <p>Unable to load your service provider information.</p>
+          <button 
+            onClick={() => router.push('/auth/signin')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Sign In Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <DashboardLayout title="Technician Dashboard">
@@ -102,13 +146,21 @@ export default function TechnicianDashboard() {
               Welcome back, {serviceProvider.company_name}
             </p>
           </div>
-          <Button 
-            onClick={handleViewTickets}
-            className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            View All Tickets
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button 
+              onClick={handleViewTickets}
+              className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              View All Tickets
+            </Button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Metrics Grid */}
@@ -198,7 +250,7 @@ export default function TechnicianDashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {serviceProvider.skills.map((skill) => (
+                {serviceProvider.skills.map((skill: string) => (
                   <Badge key={skill} variant="outline" className="border-emerald-200 text-emerald-700">
                     {skill}
                   </Badge>

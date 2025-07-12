@@ -1,12 +1,12 @@
-export type UserRole = 'store_register' | 'service_provider' | 'admin' | 'moderator';
+export type UserRole = 'STORE_REGISTER' | 'SERVICE_PROVIDER' | 'ADMIN' | 'MODERATOR';
 
 export type TicketStatus = 'open' | 'assigned' | 'in_progress' | 'rejected_by_tech' | 'escalated' | 'completed' | 'closed';
 
 export type TicketPriority = 'high' | 'medium' | 'low';
 
-export type StoreStatus = 'pending_approval' | 'approved' | 'rejected' | 'deactivated';
+export type StoreStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DEACTIVATED';
 
-export type ServiceProviderStatus = 'pending_approval' | 'approved' | 'rejected' | 'deactivated';
+export type ServiceProviderStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DEACTIVATED';
 
 export interface User {
   id: string;
@@ -15,9 +15,14 @@ export interface User {
   phone_number: string;
   role: UserRole;
   associated_entity_id?: string;
+  associated_store_id?: string;
+  associated_provider_id?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  registration_status?: string;
+  store?: Store;
+  service_provider?: ServiceProvider;
 }
 
 export interface Store {

@@ -14,8 +14,14 @@ export default function StoreTicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'store_register') {
+    if (!user) {
+      router.push('/auth/signin');
+      return;
+    }
+    
+    if ((user.role as string) !== 'STORE_REGISTER') {
       router.push('/');
+      return;
     }
   }, [user, router]);
 

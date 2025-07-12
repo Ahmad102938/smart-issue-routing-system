@@ -70,7 +70,7 @@ async function main() {
       email: 'manager@walmart-dallas.com',
       password_hash: storePassword,
       role: UserRole.STORE_REGISTER,
-      associated_entity_id: store.id,
+      associated_store_id: store.id,
       phone_number: '+1-555-0003'
     }
   });
@@ -106,7 +106,7 @@ async function main() {
       email: 'john@elitetech.com',
       password_hash: techPassword,
       role: UserRole.SERVICE_PROVIDER,
-      associated_entity_id: serviceProvider.id,
+      associated_provider_id: serviceProvider.id,
       phone_number: '+1-555-0004'
     }
   });
