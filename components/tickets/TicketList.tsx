@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,6 @@ import {
 } from 'lucide-react';
 import { Ticket } from '@/types';
 import { mockTickets, mockStores, mockServiceProviders } from '@/lib/mockData';
-import { getCurrentUser } from '@/lib/auth';
 
 interface TicketListProps {
   onTicketSelect?: (ticket: Ticket) => void;
@@ -29,15 +29,15 @@ export default function TicketList({ onTicketSelect }: TicketListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const user = getCurrentUser();
+  const { data: session } = useSession();
 
   // Filter tickets based on user role
   const userTickets = mockTickets.filter(ticket => {
-    if (user?.role === 'store_register') {
-      return ticket.store_id === user.associated_entity_id;
+    if (session?.user?.role === 'STORE_REGISTER') {
+      return ticket.store_id === session.user.associated_entity_id;
     }
-    if (user?.role === 'service_provider') {
-      return ticket.assigned_service_provider_id === user.associated_entity_id;
+    if (session?.user?.role === 'SERVICE_PROVIDER') {
+      return ticket.assigned_service_provider_id === session.user.associated_entity_id;
     }
     return true; // Admin and Moderator see all
   });
@@ -105,7 +105,7 @@ export default function TicketList({ onTicketSelect }: TicketListProps) {
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {user?.role === 'service_provider' ? 'My Assignments' : 'Tickets'}
+            {session?.user?.role === 'SERVICE_PROVIDER' ? 'My Assignments' : 'Tickets'}
           </h1>
           <p className="text-gray-600">
             {filteredTickets.length} ticket{filteredTickets.length !== 1 ? 's' : ''} found
@@ -193,7 +193,7 @@ export default function TicketList({ onTicketSelect }: TicketListProps) {
                         
                         <div className="flex flex-wrap gap-2 text-sm text-gray-500">
                           <span>📍 {ticket.location_in_store}</span>
-                          {store && user?.role !== 'store_register' && (
+                          {store && session?.user?.role !== 'STORE_REGISTER' && (
                             <span>🏪 {store.name}</span>
                           )}
                           <span>🏷️ {ticket.ai_classification_category} - {ticket.ai_classification_subcategory}</span>

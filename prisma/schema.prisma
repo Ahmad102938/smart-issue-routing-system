@@ -8,28 +8,28 @@ datasource db {
 }
 
 model User {
-  id                                                              String                 @id @default(cuid())
-  username                                                        String                 @unique
-  email                                                           String                 @unique
-  password_hash                                                   String
-  phone_number                                                    String?
-  role                                                            UserRole
-  associated_store_id                                             String?
-  associated_provider_id                                          String?
-  is_active                                                       Boolean                @default(true)
-  created_at                                                      DateTime               @default(now())
-  updated_at                                                      DateTime               @updatedAt
-  registration_status                                             UserRegistrationStatus @default(PENDING)
-  temp_password_hash                                              String?
-  force_password_change                                           Boolean                @default(false)
-  documents                                                       Document[]
-  escalated_tickets                                               Escalation[]           @relation("EscalatedTo")
-  remarks                                                         Remark[]
-  approved_providers                                              ServiceProvider[]      @relation("ServiceProviderApprover")
-  moderated_stores                                                Store[]                @relation("StoreModerator")
-  reported_tickets                                                Ticket[]               @relation("TicketReporter")
-  store                                                           Store?                 @relation("StoreRegister", fields: [associated_store_id], references: [id])
-  service_provider                                                ServiceProvider?       @relation("ServiceProviderUser", fields: [associated_provider_id], references: [id])
+  id                     String                 @id @default(cuid())
+  username               String                 @unique
+  email                  String                 @unique
+  password_hash          String
+  phone_number           String?
+  role                   UserRole
+  is_active              Boolean                @default(true)
+  created_at             DateTime               @default(now())
+  updated_at             DateTime               @updatedAt
+  registration_status    UserRegistrationStatus @default(PENDING)
+  temp_password_hash     String?
+  force_password_change  Boolean                @default(false)
+  associated_provider_id String?
+  associated_store_id    String?
+  documents              Document[]
+  escalated_tickets      Escalation[]           @relation("EscalatedTo")
+  remarks                Remark[]
+  approved_providers     ServiceProvider[]      @relation("ServiceProviderApprover")
+  moderated_stores       Store[]                @relation("StoreModerator")
+  reported_tickets       Ticket[]               @relation("TicketReporter")
+  service_provider       ServiceProvider?       @relation("ServiceProviderUser", fields: [associated_provider_id], references: [id])
+  store                  Store?                 @relation("StoreRegister", fields: [associated_store_id], references: [id])
 
   @@map("users")
 }
@@ -46,44 +46,44 @@ model Document {
 }
 
 model Store {
-  id                                       String      @id @default(cuid())
-  name                                     String
-  store_id                                 String      @unique
-  address                                  String
-  city                                     String
-  state                                    String
-  zip_code                                 String
-  location_coordinates                     Json
-  legal_info_doc_url                       String?
-  status                                   StoreStatus @default(PENDING_APPROVAL)
-  moderator_user_id                        String?
-  created_at                               DateTime    @default(now())
-  approved_at                              DateTime?
-  moderator                                User?       @relation("StoreModerator", fields: [moderator_user_id], references: [id])
-  tickets                                  Ticket[]
-  register_users                           User[]      @relation("StoreRegister")
+  id                   String      @id @default(cuid())
+  name                 String
+  store_id             String      @unique
+  address              String
+  city                 String
+  state                String
+  zip_code             String
+  location_coordinates Json
+  legal_info_doc_url   String?
+  status               StoreStatus @default(PENDING_APPROVAL)
+  moderator_user_id    String?
+  created_at           DateTime    @default(now())
+  approved_at          DateTime?
+  moderator            User?       @relation("StoreModerator", fields: [moderator_user_id], references: [id])
+  tickets              Ticket[]
+  register_users       User[]      @relation("StoreRegister")
 
   @@map("stores")
 }
 
 model ServiceProvider {
-  id                                                  String                @id @default(cuid())
-  company_name                                        String
-  primary_location_address                            String
-  primary_location_coordinates                        Json
-  unique_company_id                                   String                @unique
-  certification_docs_url                              String?
-  skills                                              String[]
-  capacity_per_day                                    Int                   @default(5)
-  current_load                                        Int                   @default(0)
-  status                                              ServiceProviderStatus @default(PENDING_APPROVAL)
-  approved_by_moderator_id                            String?
-  created_at                                          DateTime              @default(now())
-  approved_at                                         DateTime?
-  approved_by                                         User?                 @relation("ServiceProviderApprover", fields: [approved_by_moderator_id], references: [id])
-  ticket_assignments                                  TicketAssignment[]
-  assigned_tickets                                    Ticket[]              @relation("AssignedProvider")
-  users                                               User[]                @relation("ServiceProviderUser")
+  id                           String                @id @default(cuid())
+  company_name                 String
+  primary_location_address     String
+  primary_location_coordinates Json
+  unique_company_id            String                @unique
+  certification_docs_url       String?
+  skills                       String[]
+  capacity_per_day             Int                   @default(5)
+  current_load                 Int                   @default(0)
+  status                       ServiceProviderStatus @default(PENDING_APPROVAL)
+  approved_by_moderator_id     String?
+  created_at                   DateTime              @default(now())
+  approved_at                  DateTime?
+  approved_by                  User?                 @relation("ServiceProviderApprover", fields: [approved_by_moderator_id], references: [id])
+  ticket_assignments           TicketAssignment[]
+  assigned_tickets             Ticket[]              @relation("AssignedProvider")
+  users                        User[]                @relation("ServiceProviderUser")
 
   @@map("service_providers")
 }

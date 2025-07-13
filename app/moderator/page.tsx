@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import MetricsCard from '@/components/dashboard/MetricsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,12 +22,11 @@ import {
   UserCheck,
   UserX
 } from 'lucide-react';
-import { getCurrentUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ModeratorDashboard() {
   const router = useRouter();
-  const user = getCurrentUser();
+  const { data: session, status } = useSession();
   const { toast } = useToast();
   
   // State for store data
@@ -39,7 +39,7 @@ export default function ModeratorDashboard() {
   // Load moderator's store data
   useEffect(() => {
     async function loadModeratorData() {
-      if (!user) return;
+      if (!session?.user?.id) return;
       
       try {
         // Get moderator's assigned store
@@ -85,20 +85,24 @@ export default function ModeratorDashboard() {
       }
     }
 
-    loadModeratorData();
-  }, [user]);
+    if (status === 'authenticated') {
+      loadModeratorData();
+    }
+  }, [session, status]);
 
   useEffect(() => {
-    if (!user) {
+    if (status === 'loading') return;
+    
+    if (status === 'unauthenticated') {
       router.push('/auth/signin');
       return;
     }
     
-    if (user.role !== 'MODERATOR') {
+    if (session?.user?.role !== 'MODERATOR') {
       router.push('/');
       return;
     }
-  }, [user, router]);
+  }, [session, status, router]);
 
   const handleProviderAction = async (userId: string, action: 'APPROVE' | 'REJECT') => {
     setActionMsg('');
@@ -109,7 +113,7 @@ export default function ModeratorDashboard() {
         body: JSON.stringify({ 
           userId, 
           action,
-          moderator_id: user?.id 
+          moderator_id: session?.user?.id 
         })
       });
 
@@ -131,11 +135,10 @@ export default function ModeratorDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    router.push('/auth/signin');
+    signOut({ callbackUrl: '/auth/signin' });
   };
 
-  if (loading) {
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -151,7 +154,7 @@ export default function ModeratorDashboard() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">No Store Assigned</h1>
-          <p>You haven't been assigned to any store yet. Please contact an administrator.</p>
+          <p>You haven&apos;t been assigned to any store yet. Please contact an administrator.</p>
           <button 
             onClick={handleLogout}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -183,7 +186,7 @@ export default function ModeratorDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              Welcome, {user?.username}
+              Welcome, {session?.user?.username}
             </span>
             <button
               onClick={handleLogout}
@@ -250,130 +253,115 @@ export default function ModeratorDashboard() {
                   <p>{store.city}, {store.state} {store.zip_code}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Status</Label>
-                  <Badge variant={store.status === 'APPROVED' ? 'default' : 'secondary'}>
-                    {store.status}
-                  </Badge>
+                  <Label className="text-sm font-medium text-gray-600">Phone</Label>
+                  <p>{store.phone}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Store Manager</Label>
+                  <p>{store.manager_name}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
+          {/* Service Provider Approvals */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <UserCheck className="h-5 w-5" />
+                Pending Service Provider Approvals
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                  <span className="text-sm">New ticket created: Freezer issue</span>
-                  <span className="text-xs text-gray-500 ml-auto">2 hours ago</span>
+              {actionMsg && (
+                <div className="mb-4 p-3 bg-green-100 text-green-800 rounded">
+                  {actionMsg}
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full" />
-                  <span className="text-sm">Service provider approved: Elite Tech Services</span>
-                  <span className="text-xs text-gray-500 ml-auto">4 hours ago</span>
+              )}
+              
+              {pendingProviders.length === 0 ? (
+                <p className="text-gray-500">No pending service provider approvals.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pendingProviders.map((provider) => (
+                    <div key={provider.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold">{provider.username}</h4>
+                          <p className="text-sm text-gray-600">{provider.email}</p>
+                          <p className="text-xs text-gray-500">
+                            Registered: {new Date(provider.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleProviderAction(provider.id, 'APPROVE')}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleProviderAction(provider.id, 'REJECT')}
+                          >
+                            <UserX className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-yellow-50 rounded-lg">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full" />
-                  <span className="text-sm">Ticket assigned to technician</span>
-                  <span className="text-xs text-gray-500 ml-auto">6 hours ago</span>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Pending Service Provider Approvals */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">Pending Service Provider Approvals</h2>
-          {pendingProviders.length === 0 ? (
-            <div className="text-gray-500">No pending service provider registrations.</div>
-          ) : (
+        {/* Recent Activity */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Recent Store Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-4">
-              {pendingProviders.map(provider => (
-                <div key={provider.id} className="border rounded p-4 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <div className="font-semibold">{provider.service_provider?.company_name}</div>
-                    <div className="text-sm text-gray-600">Company ID: {provider.service_provider?.unique_company_id}</div>
-                    <div className="text-sm text-gray-600">Location: {provider.service_provider?.primary_location_address}</div>
-                    <div className="text-sm text-gray-600">Registered by: {provider.username} ({provider.email})</div>
-                    <div className="text-sm text-gray-600">Skills: {provider.service_provider?.skills?.join(', ')}</div>
-                    <div className="text-sm text-gray-600">Capacity: {provider.service_provider?.capacity_per_day} tickets/day</div>
-                    <div className="text-sm text-gray-600">Documents:</div>
-                    <ul className="ml-4 list-disc">
-                      {provider.documents && provider.documents.length > 0 ? (
-                        provider.documents.map((doc: any) => (
-                          <li key={doc.id}>
-                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{doc.type}</a>
-                          </li>
-                        ))
-                      ) : (
-                        <li className="text-gray-500">No documents uploaded</li>
-                      )}
-                    </ul>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 flex items-center gap-2"
-                      onClick={() => handleProviderAction(provider.id, 'APPROVE')}
-                    >
-                      <UserCheck className="h-4 w-4" />
-                      Approve
-                    </button>
-                    <button
-                      className="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 flex items-center gap-2"
-                      onClick={() => handleProviderAction(provider.id, 'REJECT')}
-                    >
-                      <UserX className="h-4 w-4" />
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {actionMsg && <div className="mt-2 text-sm text-blue-700">{actionMsg}</div>}
-        </div>
-
-        {/* Store Tickets */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">Recent Store Tickets</h2>
-          {storeTickets.length === 0 ? (
-            <div className="text-gray-500">No tickets found for this store.</div>
-          ) : (
-            <div className="space-y-4">
-              {storeTickets.map(ticket => (
-                <div key={ticket.id} className="border rounded p-4 bg-white">
-                  <div className="flex justify-between items-start">
+              {storeTickets.map((ticket) => (
+                <div key={ticket.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      ticket.status === 'OPEN' ? 'bg-red-500' :
+                      ticket.status === 'IN_PROGRESS' ? 'bg-yellow-500' :
+                      'bg-green-500'
+                    }`} />
                     <div>
-                      <div className="font-semibold">{ticket.description}</div>
-                      <div className="text-sm text-gray-600">Ticket ID: {ticket.id}</div>
-                      <div className="text-sm text-gray-600">Created: {new Date(ticket.created_at).toLocaleString()}</div>
+                      <h4 className="font-medium">{ticket.description}</h4>
+                      <p className="text-sm text-gray-600">
+                        {new Date(ticket.created_at).toLocaleDateString()}
+                      </p>
                     </div>
-                    <div className="flex gap-2">
-                      <Badge variant={
-                        ticket.priority === 'HIGH' ? 'destructive' : 
-                        ticket.priority === 'MEDIUM' ? 'default' : 'secondary'
-                      }>
-                        {ticket.priority}
-                      </Badge>
-                      <Badge variant={
-                        ticket.status === 'OPEN' ? 'destructive' :
-                        ticket.status === 'IN_PROGRESS' ? 'default' :
-                        ticket.status === 'COMPLETED' ? 'secondary' : 'outline'
-                      }>
-                        {ticket.status}
-                      </Badge>
-                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={
+                      ticket.priority === 'HIGH' ? 'destructive' :
+                      ticket.priority === 'MEDIUM' ? 'secondary' :
+                      'default'
+                    }>
+                      {ticket.priority}
+                    </Badge>
+                    <Badge variant="outline">
+                      {ticket.status}
+                    </Badge>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

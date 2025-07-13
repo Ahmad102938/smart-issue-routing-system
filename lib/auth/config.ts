@@ -107,5 +107,11 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/auth/signin',
     error: '/auth/error'
+  },
+  events: {
+    async signOut({ token }) {
+      // Clear any stored session data
+      console.log('User signed out:', token?.sub);
+    }
   }
 };

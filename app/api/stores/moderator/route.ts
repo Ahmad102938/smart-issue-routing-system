@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth/config';
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the moderator user ID from the request headers or query params
-    // In a real app, this would come from authentication middleware
-    const url = new URL(request.url);
-    const moderatorId = url.searchParams.get('moderator_id');
+    // Get the authenticated session
+    const session = await getServerSession(authOptions);
     
-    if (!moderatorId) {
+    if (!session?.user?.id) {
       return NextResponse.json({ 
-        error: 'Moderator ID is required' 
-      }, { status: 400 });
+        error: 'Authentication required' 
+      }, { status: 401 });
     }
+
+    const moderatorId = session.user.id;
 
     // Verify the user is a moderator
     const moderator = await prisma.user.findUnique({

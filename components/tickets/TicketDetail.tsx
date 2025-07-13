@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Ticket } from '@/types';
 import { mockStores, mockServiceProviders, mockRemarks } from '@/lib/mockData';
-import { getCurrentUser } from '@/lib/auth';
+import { useSession } from 'next-auth/react';
 import { useToast } from '@/hooks/use-toast';
 
 interface TicketDetailProps {
@@ -32,7 +32,7 @@ interface TicketDetailProps {
 export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const [newRemark, setNewRemark] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const user = getCurrentUser();
+  const { data: session } = useSession();
   const { toast } = useToast();
 
   const store = mockStores.find(s => s.id === ticket.store_id);
@@ -49,13 +49,13 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     // In a real app, this would add to the database
     setNewRemark('');
     setIsSubmitting(false);
-    if (user?.role === 'store_register') {
+    if (session?.user?.role === 'STORE_REGISTER') {
       toast({
         title: 'New Remark Added',
         description: 'A new remark has been added to your ticket.',
       });
     }
-    if (user?.role === 'service_provider') {
+    if (session?.user?.role === 'SERVICE_PROVIDER') {
       toast({
         title: 'Remark Added',
         description: 'Your remark has been added to the ticket.',
@@ -69,13 +69,13 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     // In real app, would update ticket status
-    if (user?.role === 'store_register') {
+    if (session?.user?.role === 'STORE_REGISTER') {
       toast({
         title: 'Ticket Accepted',
         description: 'Your ticket has been accepted by a technician.',
       });
     }
-    if (user?.role === 'service_provider') {
+    if (session?.user?.role === 'SERVICE_PROVIDER') {
       toast({
         title: 'Ticket Accepted',
         description: 'You have accepted this ticket assignment.',

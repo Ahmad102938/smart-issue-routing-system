@@ -425,8 +425,44 @@ export async function PATCH(request: NextRequest) {
           registration_status: 'REJECTED'
         }
       });
+    } else if (action === 'ACTIVATE') {
+      // Activate user account
+      await prisma.user.update({
+        where: { id: userId },
+        data: { 
+          is_active: true
+        }
+      });
+
+      return NextResponse.json({ 
+        message: 'User activated successfully',
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          is_active: true
+        }
+      });
+    } else if (action === 'DEACTIVATE') {
+      // Deactivate user account
+      await prisma.user.update({
+        where: { id: userId },
+        data: { 
+          is_active: false
+        }
+      });
+
+      return NextResponse.json({ 
+        message: 'User deactivated successfully',
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          is_active: false
+        }
+      });
     } else {
-      return NextResponse.json({ error: 'Invalid action. Use APPROVE or REJECT' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid action. Use APPROVE, REJECT, ACTIVATE, or DEACTIVATE' }, { status: 400 });
     }
   } catch (error: any) {
     console.error('Approval error:', error);
@@ -451,6 +487,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(users);
   } catch (error: any) {
     console.error('Fetch users error:', error);
+    // Return empty array instead of error when database is not available
+    if (error.code === 'P1001' || error.message?.includes('Can\'t reach database server')) {
+      return NextResponse.json([]);
+    }
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
 }

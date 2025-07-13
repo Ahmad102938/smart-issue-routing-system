@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn, useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,37 @@ export default function SignInPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { data: session, status } = useSession();
+
+  // Redirect if already authenticated (but not after signout)
+  if (status === 'authenticated' && session?.user) {
+    // Check if this is a fresh session (not after signout)
+    const isAfterSignout = sessionStorage.getItem('justSignedOut');
+    if (isAfterSignout) {
+      // Clear the flag and don't redirect
+      sessionStorage.removeItem('justSignedOut');
+      return null;
+    }
+    
+    const role = session.user.role;
+    switch (role) {
+      case 'STORE_REGISTER':
+        router.push('/store');
+        break;
+      case 'SERVICE_PROVIDER':
+        router.push('/technician');
+        break;
+      case 'ADMIN':
+        router.push('/admin');
+        break;
+      case 'MODERATOR':
+        router.push('/moderator');
+        break;
+      default:
+        router.push('/');
+    }
+    return null;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,45 +56,20 @@ export default function SignInPage() {
     try {
       console.log('Attempting login with:', { username, password: '***' });
       
-      const response = await fetch('/api/auth/signin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+      const result = await signIn('credentials', {
+        username,
+        password,
+        redirect: false,
       });
 
-      console.log('Response status:', response.status);
-      
-      const data = await response.json();
-      console.log('Response data:', data);
+      console.log('SignIn result:', result);
 
-      if (response.ok) {
-        console.log('Login successful, user role:', data.user.role);
-        
-        // Store user in localStorage for session management
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
-        
-        // Redirect based on role
-        switch (data.user.role) {
-          case 'STORE_REGISTER':
-            router.push('/store');
-            break;
-          case 'SERVICE_PROVIDER':
-            router.push('/technician');
-            break;
-          case 'ADMIN':
-            router.push('/admin');
-            break;
-          case 'MODERATOR':
-            router.push('/moderator');
-            break;
-          default:
-            router.push('/');
-        }
-      } else {
-        console.log('Login failed:', data.error);
-        setError(data.error || 'Invalid credentials. Please try again.');
+      if (result?.error) {
+        console.log('Login failed:', result.error);
+        setError(result.error || 'Invalid credentials. Please try again.');
+      } else if (result?.ok) {
+        console.log('Login successful, redirecting...');
+        // The redirect will be handled by the useEffect above when session changes
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -135,7 +142,7 @@ export default function SignInPage() {
               <p><strong>Admin:</strong> admin / admin123</p>
               <p><strong>Store:</strong> store_dallas / store123</p>
               <p><strong>Technician:</strong> tech_john / tech123</p>
-              <p><strong>Moderator:</strong> moderator_dallas / moderator123</p>
+              <p><strong>Moderator:</strong> mod1 / 12345678</p>
             </div>
           </div>
         </CardContent>

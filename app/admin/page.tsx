@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
-import { getCurrentUser } from '@/lib/auth';
+import { useSession, signOut } from 'next-auth/react';
 import { mockStores, mockServiceProviders, mockTickets } from '@/lib/mockData';
 import { ChartContainer } from '@/components/ui/chart';
 import {
@@ -24,8 +24,56 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const user = getCurrentUser();
+  const { data: session, status } = useSession();
   const { toast } = useToast();
+  
+  // Add error boundary state
+  const [hasError, setHasError] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+
+  // Debug logging
+  console.log("AdminDashboard rendered", { session, status, hasError });
+
+  // Add session refresh mechanism and connection monitoring
+  useEffect(() => {
+    const refreshSession = async () => {
+      try {
+        // Refresh the session every 5 minutes to prevent expiration
+        const response = await fetch('/api/auth/session');
+        if (!response.ok) {
+          console.log('Session refresh failed, redirecting to signin');
+          router.push('/auth/signin');
+        }
+        setLastRefresh(new Date());
+      } catch (error) {
+        console.error('Session refresh error:', error);
+        setIsOnline(false);
+      }
+    };
+
+    // Monitor online/offline status
+    const handleOnline = () => {
+      setIsOnline(true);
+      console.log('Connection restored');
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      console.log('Connection lost');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const interval = setInterval(refreshSession, 5 * 60 * 1000); // 5 minutes
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [router]);
 
   // Pending Store Registrations State
   const [pendingStores, setPendingStores] = useState<any[]>([]);
@@ -59,44 +107,65 @@ export default function AdminDashboard() {
   const [loadingApprovedStores, setLoadingApprovedStores] = useState(false);
 
   useEffect(() => {
-    console.log('Current user:', user);
-    if (!user) {
+    if (status === 'loading') return;
+    
+    if (status === 'unauthenticated') {
       console.log('No user found, redirecting to signin');
       router.push('/auth/signin');
       return;
     }
     
-    if ((user.role as string) !== 'ADMIN') {
+    if (session?.user?.role !== 'ADMIN') {
       console.log('User is not admin, redirecting to home');
       router.push('/');
       return;
     }
     
     console.log('User is admin, proceeding to dashboard');
-  }, [user, router]);
+  }, [session, status, router]);
 
   useEffect(() => {
     async function fetchPendingStores() {
       setLoadingStores(true);
-      const res = await fetch('/api/auth/register');
-      let data = [];
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = [];
+      let retries = 3;
+      
+      while (retries > 0) {
+        try {
+          const res = await fetch('/api/auth/register', {
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          
+          const data = await res.json();
+          setPendingStores(
+            data.filter((u: any) => u.role === 'STORE_REGISTER' && u.registration_status === 'PENDING')
+          );
+          break;
+        } catch (error) {
+          console.error(`Fetch pending stores attempt ${4 - retries} failed:`, error);
+          retries--;
+          if (retries === 0) {
+            setPendingStores([]);
+            toast({
+              title: "Connection Error",
+              description: "Failed to load pending stores. Please refresh the page.",
+              variant: "destructive"
+            });
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          }
+        }
       }
-      if (!res.ok) {
-        setPendingStores([]);
-        setLoadingStores(false);
-        return;
-      }
-      setPendingStores(
-        data.filter((u: any) => u.role === 'STORE_REGISTER' && u.registration_status === 'PENDING')
-      );
       setLoadingStores(false);
     }
     fetchPendingStores();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     async function fetchProviders() {
@@ -243,6 +312,17 @@ export default function AdminDashboard() {
   }
 
   async function handleProviderStatus(userId: string, isActive: boolean) {
+    // Prevent admin from deactivating themselves if they are also a service provider
+    if (userId === session?.user?.id) {
+      setProviderMsg('You cannot deactivate your own account.');
+      toast({
+        title: 'Action Denied',
+        description: 'You cannot deactivate your own account.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setProviderMsg('');
     const res = await fetch('/api/auth/register', {
       method: 'PATCH',
@@ -264,6 +344,17 @@ export default function AdminDashboard() {
   }
 
   async function handleUserStatus(userId: string, isActive: boolean) {
+    // Prevent admin from deactivating themselves
+    if (userId === session?.user?.id) {
+      setUserMsg('You cannot deactivate your own account.');
+      toast({
+        title: 'Action Denied',
+        description: 'You cannot deactivate your own account.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setUserMsg('');
     const res = await fetch('/api/auth/register', {
       method: 'PATCH',
@@ -296,7 +387,7 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...moderatorForm,
-        admin_user_id: user?.id
+        admin_user_id: session?.user?.id
       })
     });
     const data = await res.json();
@@ -321,6 +412,17 @@ export default function AdminDashboard() {
   }
 
   async function handleModeratorStatus(moderatorId: string, isActive: boolean) {
+    // Prevent admin from deactivating themselves if they are also a moderator
+    if (moderatorId === session?.user?.id) {
+      setModeratorMsg('You cannot deactivate your own account.');
+      toast({
+        title: 'Action Denied',
+        description: 'You cannot deactivate your own account.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setModeratorMsg('');
     const res = await fetch('/api/auth/moderator', {
       method: 'PATCH',
@@ -377,14 +479,32 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    router.push('/auth/signin');
+  const handleLogout = async () => {
+    console.log('Logging out...');
+    try {
+      // Set flag to prevent auto-redirect after signout
+      sessionStorage.setItem('justSignedOut', 'true');
+      
+      await signOut({ 
+        callbackUrl: '/auth/signin',
+        redirect: true 
+      });
+    } catch (error) {
+      console.error('Signout error:', error);
+      // Fallback: redirect manually
+      sessionStorage.setItem('justSignedOut', 'true');
+      window.location.href = '/auth/signin';
+    }
+  };
+
+  const handleRefresh = () => {
+    console.log('Manual refresh triggered');
+    window.location.reload();
   };
 
   const totalStores = mockStores.length;
   const totalProviders = mockServiceProviders.length;
-  const approvedProviders = mockServiceProviders.filter(p => p.status === 'approved').length;
+  const approvedProviders = mockServiceProviders.filter(p => p.status === 'APPROVED').length;
   const totalTickets = mockTickets.length;
   const openTickets = mockTickets.filter(t => t.status === 'open').length;
   const inProgressTickets = mockTickets.filter(t => t.status === 'in_progress').length;
@@ -437,10 +557,54 @@ export default function AdminDashboard() {
     { name: 'Tech E', completed: 11 },
   ];
 
-  if (!user) return null;
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">Loading Dashboard...</h1>
+          <p className="text-gray-600">Please wait while we load your admin dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (status === 'unauthenticated') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Authentication Required</h1>
+          <p>Please sign in to access the admin dashboard.</p>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <DashboardLayout title="Admin Dashboard">
+  // Error boundary
+  if (hasError) {
+    console.log("Error boundary triggered");
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4 text-red-600">Something went wrong</h1>
+          <p className="mb-4">There was an error loading the admin dashboard.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  console.log("About to enter try block");
+
+  try {
+    console.log("About to render DashboardLayout");
+    return (
+      <DashboardLayout title="Admin Dashboard">
       <div className="space-y-8">
         {/* Header */}
         <div className="flex justify-between items-start">
@@ -449,10 +613,25 @@ export default function AdminDashboard() {
             <p className="text-gray-600 mt-1">
               Global monitoring and management across all stores
             </p>
+            <div className="flex items-center gap-4 mt-2">
+              <div className={`flex items-center gap-2 text-sm ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                {isOnline ? 'Connected' : 'Offline'}
+              </div>
+              <span className="text-xs text-gray-500">
+                Last refresh: {lastRefresh.toLocaleTimeString()}
+              </span>
+              <button
+                onClick={handleRefresh}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              Welcome, {user?.username}
+              Welcome, {session?.user?.email}
             </span>
             <button
               onClick={handleLogout}
@@ -494,6 +673,29 @@ export default function AdminDashboard() {
             trend={{ value: 2.1, isPositive: true }}
           />
         </div>
+
+        {/* Database Connection Notice */}
+        {totalStores === 0 && totalProviders === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Database Connection Issue
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>
+                    The database is currently not connected. You can still use the admin interface, but data will not be saved or loaded from the database.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Ticket Status Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -712,7 +914,7 @@ export default function AdminDashboard() {
                     <div className="font-semibold">{storeUser.store?.name}</div>
                     <div className="text-sm text-gray-600">Store ID: {storeUser.store?.store_id}</div>
                     <div className="text-sm text-gray-600">Location: {storeUser.store?.address}, {storeUser.store?.city}, {storeUser.store?.state}</div>
-                    <div className="text-sm text-gray-600">Registered by: {storeUser.username} ({storeUser.email})</div>
+                    <div className="text-sm text-gray-600">Registered by: {storeUser.username || 'N/A'} ({storeUser.email})</div>
                     <div className="text-sm text-gray-600">Legal Docs:</div>
                     <ul className="ml-4 list-disc">
                       {storeUser.documents && storeUser.documents.length > 0 ? (
@@ -762,7 +964,7 @@ export default function AdminDashboard() {
                     <div className="font-semibold">{provider.service_provider?.company_name}</div>
                     <div className="text-sm text-gray-600">Company ID: {provider.service_provider?.unique_company_id}</div>
                     <div className="text-sm text-gray-600">Location: {provider.service_provider?.primary_location_address}</div>
-                    <div className="text-sm text-gray-600">Registered by: {provider.username} ({provider.email})</div>
+                    <div className="text-sm text-gray-600">Registered by: {provider.username || 'N/A'} ({provider.email})</div>
                     <div className="text-sm text-gray-600">Skills: {provider.service_provider?.skills?.join(', ')}</div>
                     <div className="text-sm text-gray-600">Capacity: {provider.service_provider?.capacity_per_day} tickets/day</div>
                     <div className="text-sm text-gray-600">Documents:</div>
@@ -814,7 +1016,7 @@ export default function AdminDashboard() {
                     <div className="font-semibold">{provider.service_provider?.company_name}</div>
                     <div className="text-sm text-gray-600">Company ID: {provider.service_provider?.unique_company_id}</div>
                     <div className="text-sm text-gray-600">Location: {provider.service_provider?.primary_location_address}</div>
-                    <div className="text-sm text-gray-600">Registered by: {provider.username} ({provider.email})</div>
+                    <div className="text-sm text-gray-600">Registered by: {provider.username || 'N/A'} ({provider.email})</div>
                     <div className="text-sm text-gray-600">Status: <span className={`font-semibold ${provider.is_active ? 'text-green-600' : 'text-red-600'}`}>{provider.is_active ? 'Active' : 'Inactive'}</span></div>
                     <div className="text-sm text-gray-600">Skills: {provider.service_provider?.skills?.join(', ')}</div>
                     <div className="text-sm text-gray-600">Capacity: {provider.service_provider?.capacity_per_day} tickets/day</div>
@@ -975,22 +1177,29 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(user => (
-                    <tr key={user.id} className="border-b">
-                      <td className="p-2 border">{user.username}</td>
-                      <td className="p-2 border">{user.email}</td>
-                      <td className="p-2 border">{user.role}</td>
+                  {users.map(userItem => (
+                    <tr key={userItem.id} className={`border-b ${userItem.id === session?.user?.id ? 'bg-blue-50' : ''}`}>
                       <td className="p-2 border">
-                        <span className={`font-semibold ${user.is_active ? 'text-green-600' : 'text-red-600'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
+                        {userItem.username}
+                        {userItem.id === session?.user?.id && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded">You</span>}
                       </td>
-                      <td className="p-2 border">{user.registration_status}</td>
+                      <td className="p-2 border">{userItem.email}</td>
+                      <td className="p-2 border">{userItem.role}</td>
                       <td className="p-2 border">
-                        <button
-                          className={`px-3 py-1 rounded font-semibold ${user.is_active ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                          onClick={() => handleUserStatus(user.id, user.is_active)}
-                        >
-                          {user.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
+                        <span className={`font-semibold ${userItem.is_active ? 'text-green-600' : 'text-red-600'}`}>{userItem.is_active ? 'Active' : 'Inactive'}</span>
+                      </td>
+                      <td className="p-2 border">{userItem.registration_status}</td>
+                      <td className="p-2 border">
+                        {userItem.id === session?.user?.id ? (
+                          <span className="text-gray-500 text-sm">Cannot modify own account</span>
+                        ) : (
+                          <button
+                            className={`px-3 py-1 rounded font-semibold ${userItem.is_active ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                            onClick={() => handleUserStatus(userItem.id, userItem.is_active)}
+                          >
+                            {userItem.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1002,5 +1211,42 @@ export default function AdminDashboard() {
         </div>
       </div>
     </DashboardLayout>
+  );
+  } catch (error) {
+    console.error('Admin dashboard error:', error);
+    setHasError(true);
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4 text-red-600">Something went wrong</h1>
+          <p className="mb-4">There was an error loading the admin dashboard.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback render - this should never be reached, but ensures something renders
+  console.log("Fallback render reached - this shouldn't happen");
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-4 text-blue-600">Admin Dashboard</h1>
+        <p className="mb-4">Session: {JSON.stringify(session)}</p>
+        <p className="mb-4">Status: {status}</p>
+        <p className="mb-4">Error State: {hasError ? 'Yes' : 'No'}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Reload Page
+        </button>
+      </div>
+    </div>
   );
 }

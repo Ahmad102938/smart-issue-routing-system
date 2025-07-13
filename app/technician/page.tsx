@@ -19,21 +19,21 @@ import {
   TrendingUp,
   Eye
 } from 'lucide-react';
-import { getCurrentUser } from '@/lib/auth';
+import { useSession, signOut } from 'next-auth/react';
 import { mockTickets, mockServiceProviders } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 
 export default function TechnicianDashboard() {
   const router = useRouter();
-  const user = getCurrentUser();
+  const { data: session, status } = useSession();
   const [capacity, setCapacity] = useState(5);
   const { toast } = useToast();
   
-  // Get current service provider from user data or mock data
-  const serviceProvider = user?.service_provider || mockServiceProviders.find(p => p.id === user?.associated_provider_id);
+  // Get current service provider from session data or mock data
+  const serviceProvider = session?.user?.service_provider || mockServiceProviders.find(p => p.id === session?.user?.associated_entity_id);
   
   // Filter tickets for this technician
-  const myTickets = mockTickets.filter(t => t.assigned_service_provider_id === user?.associated_provider_id || user?.service_provider?.id);
+  const myTickets = mockTickets.filter(t => t.assigned_service_provider_id === session?.user?.associated_entity_id || session?.user?.service_provider?.id);
   const inProgressTickets = myTickets.filter(t => t.status === 'in_progress');
   const completedToday = myTickets.filter(t => 
     t.status === 'completed' && 
@@ -62,31 +62,37 @@ export default function TechnicianDashboard() {
   };
 
   useEffect(() => {
-    console.log('Technician page - Current user:', user);
+    console.log('Technician page - Session:', session, 'Status:', status);
     console.log('Technician page - Service provider:', serviceProvider);
     
-    if (!user) {
-      console.log('No user found, redirecting to signin');
+    if (status === 'loading') {
+      console.log('Session loading...');
+      return;
+    }
+    
+    if (!session?.user) {
+      console.log('No session found, redirecting to signin');
       router.push('/auth/signin');
       return;
     }
     
-    if (user.role !== 'SERVICE_PROVIDER') {
+    if (session.user.role !== 'SERVICE_PROVIDER') {
       console.log('User is not service provider, redirecting to home');
       router.push('/');
       return;
     }
     
     console.log('User is service provider, proceeding to dashboard');
-  }, [user, router, serviceProvider]);
+  }, [session, status, router, serviceProvider]);
 
   const handleViewTickets = () => {
     router.push('/technician/tickets');
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    router.push('/auth/signin');
+    // Set flag to prevent auto-redirect after signout
+    sessionStorage.setItem('justSignedOut', 'true');
+    signOut({ callbackUrl: '/auth/signin' });
   };
 
   const getStatusColor = (status: string) => {
@@ -107,12 +113,35 @@ export default function TechnicianDashboard() {
     }
   };
 
-  if (!user) {
+  // Loading state
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
-          <p>Please wait while we load your dashboard.</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading technician dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated
+  if (!session?.user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Redirecting to sign in...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Wrong role
+  if (session.user.role !== 'SERVICE_PROVIDER') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Access denied. Redirecting...</p>
         </div>
       </div>
     );

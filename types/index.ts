@@ -52,7 +52,7 @@ export interface ServiceProvider {
     longitude: number;
   };
   unique_company_id: string;
-  skills: string[];
+  skills: string;
   capacity_per_day: number;
   current_load: number;
   status: ServiceProviderStatus;
