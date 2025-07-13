@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 
 interface TicketDetailProps {
-  ticket: Ticket & { remarks?: Remark[]; assigned_provider?: ServiceProvider };
+  ticket: Ticket & { 
+    remarks?: Remark[]; 
+    assigned_provider?: ServiceProvider;
+    assignments?: any[];
+  };
   onBack: () => void;
 }
 
@@ -39,39 +43,68 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const [acceptPhone, setAcceptPhone] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [fullTicket, setFullTicket] = useState(ticket);
   const { data: session } = useSession();
   // Debug log
   console.log('TicketDetail debug:', { ticket, session });
   const { toast } = useToast();
 
-  // Use real data from the ticket object
-  const store = ticket.store;
-  const provider = ticket.assigned_provider;
-  const ticketRemarks: Remark[] = Array.isArray(ticket.remarks) ? ticket.remarks : []; // Use real remarks from ticket
+  // Fetch full ticket data when component mounts
+  useEffect(() => {
+    const fetchFullTicket = async () => {
+      try {
+        const res = await fetch(`/api/tickets/${ticket.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFullTicket(data);
+        }
+      } catch (error) {
+        console.error('Error fetching full ticket:', error);
+      }
+    };
+
+    fetchFullTicket();
+  }, [ticket.id]);
+
+  // Use real data from the fullTicket object
+  const store = fullTicket.store;
+  const provider = fullTicket.assigned_provider;
+  const ticketRemarks: Remark[] = Array.isArray(fullTicket.remarks) ? fullTicket.remarks : []; // Use real remarks from fullTicket
   // Get latest assignment info
-  const latestAssignment = Array.isArray(ticket.assignments) && ticket.assignments.length > 0 ? ticket.assignments[0] : null;
+  const latestAssignment = Array.isArray(fullTicket.assignments) && fullTicket.assignments.length > 0 ? fullTicket.assignments[0] : null;
 
   const handleAddRemark = async () => {
     if (!newRemark.trim()) return;
     
     setIsSubmitting(true);
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // In a real app, this would add to the database
-    setNewRemark('');
-    setIsSubmitting(false);
-    if (session?.user?.role === 'STORE_REGISTER') {
-      toast({
-        title: 'New Remark Added',
-        description: 'A new remark has been added to your ticket.',
+    try {
+      const res = await fetch(`/api/tickets/${fullTicket.id}/remarks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remark_text: newRemark })
       });
-    }
-    if (session?.user?.role === 'SERVICE_PROVIDER') {
-      toast({
-        title: 'Remark Added',
-        description: 'Your remark has been added to the ticket.',
-      });
+      
+      if (!res.ok) throw new Error('Failed to add remark');
+      
+      setNewRemark('');
+      await refreshTicket();
+      
+      if (session?.user?.role === 'STORE_REGISTER') {
+        toast({
+          title: 'Remark Added',
+          description: 'Your remark has been added to the ticket.',
+        });
+      }
+      if (session?.user?.role === 'SERVICE_PROVIDER') {
+        toast({
+          title: 'Remark Added',
+          description: 'Your remark has been added to the ticket.',
+        });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to add remark', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -79,11 +112,10 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const refreshTicket = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/tickets?id=${ticket.id}`);
+      const res = await fetch(`/api/tickets/${fullTicket.id}`);
       if (res.ok) {
-        // Optionally, you can call a prop or context to refresh parent list
-        // For now, just reload the page
-        window.location.reload();
+        const data = await res.json();
+        setFullTicket(data);
       }
     } finally {
       setRefreshing(false);
@@ -93,7 +125,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const handleAcceptTicket = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/tickets/${ticket.id}/accept`, {
+      const res = await fetch(`/api/tickets/${fullTicket.id}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emp_id: acceptEmpId, phone_number: acceptPhone })
@@ -114,7 +146,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const handleRejectTicket = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/tickets/${ticket.id}/reject`, {
+      const res = await fetch(`/api/tickets/${fullTicket.id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: rejectReason })
@@ -134,7 +166,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const handleCompleteTicket = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/tickets/${ticket.id}/complete`, {
+      const res = await fetch(`/api/tickets/${fullTicket.id}/complete`, {
         method: 'POST' });
       if (!res.ok) throw new Error('Failed to complete ticket');
       toast({ title: 'Ticket Completed', description: 'You have marked this ticket as completed.' });
@@ -148,11 +180,14 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'open': return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'assigned': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-      case 'rejected_by_tech': return 'bg-red-100 text-red-800 border-red-200';
+      case 'OPEN': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'ASSIGNED': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'IN_PROGRESS': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'COMPLETED': return 'bg-green-100 text-green-800 border-green-200';
+      case 'REJECTED_BY_TECH': return 'bg-red-100 text-red-800 border-red-200';
+      case 'ESCALATED': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'PENDING_APPROVAL': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'CLOSED': return 'bg-gray-100 text-gray-600 border-gray-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -178,7 +213,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
 
   const getSLATimeRemaining = () => {
     const now = new Date();
-    const deadline = new Date(ticket.sla_deadline);
+    const deadline = new Date(fullTicket.sla_deadline);
     const diff = deadline.getTime() - now.getTime();
     
     if (diff <= 0) return 'SLA Exceeded';
@@ -199,13 +234,13 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
           Back
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ticket #{ticket.id}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Ticket #{fullTicket.id}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Badge className={getPriorityColor(ticket.ai_priority)}>
-              {ticket.ai_priority.toUpperCase()} PRIORITY
+            <Badge className={getPriorityColor(fullTicket.ai_priority)}>
+              {fullTicket.ai_priority.toUpperCase()} PRIORITY
             </Badge>
-            <Badge variant="outline" className={getStatusColor(ticket.status)}>
-              {ticket.status.toUpperCase().replace('_', ' ')}
+            <Badge variant="outline" className={getStatusColor(fullTicket.status)}>
+              {fullTicket.status.toUpperCase().replace('_', ' ')}
             </Badge>
           </div>
         </div>
@@ -223,17 +258,17 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-gray-700 leading-relaxed">{ticket.description}</p>
+              <p className="text-gray-700 leading-relaxed">{fullTicket.description}</p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <MapPin className="h-4 w-4" />
-                  <span>{ticket.location_in_store}</span>
+                  <span>{fullTicket.location_in_store}</span>
                 </div>
-                {ticket.qr_asset_id && (
+                {fullTicket.qr_asset_id && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                      {ticket.qr_asset_id}
+                      {fullTicket.qr_asset_id}
                     </span>
                   </div>
                 )}
@@ -241,24 +276,47 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
 
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">
-                  {ticket.ai_classification_category}
+                  {fullTicket.ai_classification_category}
                 </Badge>
                 <Badge variant="outline">
-                  {ticket.ai_classification_subcategory}
+                  {fullTicket.ai_classification_subcategory}
                 </Badge>
               </div>
             </CardContent>
           </Card>
 
+          {/* Rejection Alert */}
+          {fullTicket.status === 'REJECTED_BY_TECH' && (
+            <Card className="border-red-200 bg-red-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-red-800">
+                  <XCircle className="h-5 w-5" />
+                  Ticket Rejected
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-red-700 mb-3">
+                  This ticket has been rejected by the assigned service provider. 
+                  {latestAssignment?.rejection_reason && (
+                    <span className="font-medium"> Reason: {latestAssignment.rejection_reason}</span>
+                  )}
+                </p>
+                <p className="text-sm text-red-600">
+                  The system is attempting to find another service provider to handle this issue.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Service Provider Actions */}
-          {session?.user?.role === 'SERVICE_PROVIDER' && ticket.assigned_service_provider_id === session.user.associated_provider_id && (
+          {session?.user?.role === 'SERVICE_PROVIDER' && fullTicket.assigned_service_provider_id === session.user.associated_provider_id && (
             <Card>
               <CardHeader>
                 <CardTitle>Actions</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-3">
-                  {ticket.status === 'ASSIGNED' && (
+                  {fullTicket.status === 'ASSIGNED' && (
                     <>
                       <Button
                         onClick={() => setShowAcceptModal(true)}
@@ -279,7 +337,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                     </>
                   )}
                   
-                  {ticket.status === 'IN_PROGRESS' && (
+                  {fullTicket.status === 'IN_PROGRESS' && (
                     <Button
                       onClick={handleCompleteTicket}
                       disabled={isSubmitting || refreshing}
@@ -304,7 +362,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Add Remark (for technicians) */}
-              {session?.user?.role === 'SERVICE_PROVIDER' && ticket.status === 'IN_PROGRESS' && (
+              {session?.user?.role === 'SERVICE_PROVIDER' && fullTicket.status === 'IN_PROGRESS' && (
                 <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
                   <Textarea
                     placeholder="Add a remark about your progress..."
@@ -364,25 +422,25 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Created:</span>
-                  <span className="font-medium">{formatDateTime(ticket.created_at)}</span>
+                  <span className="font-medium">{formatDateTime(fullTicket.created_at)}</span>
                 </div>
-                {ticket.assigned_at && (
+                {fullTicket.assigned_at && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Assigned:</span>
-                    <span className="font-medium">{formatDateTime(ticket.assigned_at)}</span>
+                    <span className="font-medium">{formatDateTime(fullTicket.assigned_at)}</span>
                   </div>
                 )}
-                {ticket.accepted_at && (
+                {fullTicket.accepted_at && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Accepted:</span>
-                    <span className="font-medium">{formatDateTime(ticket.accepted_at)}</span>
+                    <span className="font-medium">{formatDateTime(fullTicket.accepted_at)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">SLA Deadline:</span>
-                  <span className="font-medium">{formatDateTime(ticket.sla_deadline)}</span>
+                  <span className="font-medium">{formatDateTime(fullTicket.sla_deadline)}</span>
                 </div>
-                <Alert className={ticket.status !== 'completed' && new Date() > new Date(ticket.sla_deadline) ? 'border-red-200' : ''}>
+                <Alert className={fullTicket.status !== 'completed' && new Date() > new Date(fullTicket.sla_deadline) ? 'border-red-200' : ''}>
                   <Clock className="h-4 w-4" />
                   <AlertDescription>
                     <strong>SLA Status:</strong> {getSLATimeRemaining()}
@@ -474,7 +532,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                   )}
                 </div>
 
-                {ticket.status === 'in_progress' && (
+                {fullTicket.status === 'in_progress' && (
                   <div className="pt-3 border-t">
                     <p className="text-xs text-gray-500 mb-2">Contact Information:</p>
                     <div className="flex items-center gap-2 text-sm">

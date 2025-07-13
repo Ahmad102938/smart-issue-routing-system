@@ -12,10 +12,10 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
-  Clock
+  Clock,
+  BarChart3
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
-import { mockStores, mockServiceProviders, mockTickets } from '@/lib/mockData';
 import { ChartContainer } from '@/components/ui/chart';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, BarChart, Bar, ResponsiveContainer
@@ -74,6 +74,10 @@ export default function AdminDashboard() {
       window.removeEventListener('offline', handleOffline);
     };
   }, [router]);
+
+  // Dashboard Stats State
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   // Pending Store Registrations State
   const [pendingStores, setPendingStores] = useState<any[]>([]);
@@ -230,6 +234,26 @@ export default function AdminDashboard() {
       setLoadingModerators(false);
     }
     fetchModerators();
+  }, []);
+
+  useEffect(() => {
+    async function fetchDashboardStats() {
+      setLoadingStats(true);
+      try {
+        const res = await fetch('/api/admin/stats');
+        if (res.ok) {
+          const data = await res.json();
+          setDashboardStats(data);
+        } else {
+          console.error('Failed to fetch dashboard stats');
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    }
+    fetchDashboardStats();
   }, []);
 
   useEffect(() => {
@@ -502,60 +526,26 @@ export default function AdminDashboard() {
     window.location.reload();
   };
 
-  const totalStores = mockStores.length;
-  const totalProviders = mockServiceProviders.length;
-  const approvedProviders = mockServiceProviders.filter(p => p.status === 'APPROVED').length;
-  const totalTickets = mockTickets.length;
-  const openTickets = mockTickets.filter(t => t.status === 'open').length;
-  const inProgressTickets = mockTickets.filter(t => t.status === 'in_progress').length;
-  const completedTickets = mockTickets.filter(t => t.status === 'completed').length;
+  // Get real data from API or use defaults
+  const stats = dashboardStats?.stats || {};
+  const charts = dashboardStats?.charts || {};
+  
+  const totalStores = stats.totalStores || 0;
+  const totalProviders = stats.totalProviders || 0;
+  const approvedProviders = stats.approvedProviders || 0;
+  const totalTickets = stats.totalTickets || 0;
+  const openTickets = stats.openTickets || 0;
+  const inProgressTickets = stats.inProgressTickets || 0;
+  const completedTickets = stats.completedTickets || 0;
+  const slaCompliance = stats.slaCompliance || 0;
 
-  // Mock analytics data
-  const categoryData = [
-    { name: 'Facilities', value: 45, color: '#3B82F6' },
-    { name: 'IT', value: 30, color: '#10B981' },
-    { name: 'Equipment', value: 25, color: '#F59E0B' }
-  ];
-
-  const priorityData = [
-    { name: 'High', value: 20, color: '#EF4444' },
-    { name: 'Medium', value: 50, color: '#F59E0B' },
-    { name: 'Low', value: 30, color: '#10B981' }
-  ];
-
-  // Mock data for analytics
-  const ticketTrendData = [
-    { date: '2024-06-01', tickets: 12 },
-    { date: '2024-06-02', tickets: 18 },
-    { date: '2024-06-03', tickets: 15 },
-    { date: '2024-06-04', tickets: 22 },
-    { date: '2024-06-05', tickets: 19 },
-    { date: '2024-06-06', tickets: 25 },
-    { date: '2024-06-07', tickets: 20 },
-  ];
-  const ticketStatusData = [
-    { name: 'Open', value: 20 },
-    { name: 'Assigned', value: 15 },
-    { name: 'In Progress', value: 10 },
-    { name: 'Completed', value: 40 },
-    { name: 'Rejected', value: 5 },
-  ];
-  const slaData = [
-    { date: '2024-06-01', sla: 92 },
-    { date: '2024-06-02', sla: 94 },
-    { date: '2024-06-03', sla: 91 },
-    { date: '2024-06-04', sla: 95 },
-    { date: '2024-06-05', sla: 93 },
-    { date: '2024-06-06', sla: 96 },
-    { date: '2024-06-07', sla: 94 },
-  ];
-  const techPerformanceData = [
-    { name: 'Tech A', completed: 12 },
-    { name: 'Tech B', completed: 9 },
-    { name: 'Tech C', completed: 15 },
-    { name: 'Tech D', completed: 7 },
-    { name: 'Tech E', completed: 11 },
-  ];
+  // Use real chart data or fallback to empty arrays
+  const categoryData = charts.categoryData || [];
+  const priorityData = charts.priorityData || [];
+  const ticketTrendData = charts.ticketTrendData || [];
+  const ticketStatusData = charts.statusData || [];
+  const slaData = charts.slaData || [];
+  const techPerformanceData = charts.techPerformanceData || [];
 
   if (status === 'loading') {
     return (
@@ -642,6 +632,45 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push('/admin/tickets')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <Ticket className="h-8 w-8 text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Ticket Management</h3>
+                  <p className="text-sm text-gray-600">View and manage all tickets</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push('/admin/analytics')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="h-8 w-8 text-green-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Analytics Dashboard</h3>
+                  <p className="text-sm text-gray-600">Detailed insights and metrics</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push('/admin')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <Users className="h-8 w-8 text-purple-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">User Management</h3>
+                  <p className="text-sm text-gray-600">Manage users and approvals</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* System Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricsCard
@@ -667,15 +696,36 @@ export default function AdminDashboard() {
           />
           <MetricsCard
             title="SLA Compliance"
-            value="94.2%"
+            value={`${slaCompliance}%`}
             icon={TrendingUp}
             color="green"
             trend={{ value: 2.1, isPositive: true }}
           />
         </div>
 
+        {/* Loading State */}
+        {loadingStats && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">
+                  Loading Dashboard Data
+                </h3>
+                <div className="mt-2 text-sm text-blue-700">
+                  <p>
+                    Fetching real-time statistics and analytics from the database...
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Database Connection Notice */}
-        {totalStores === 0 && totalProviders === 0 && (
+        {!loadingStats && totalStores === 0 && totalProviders === 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -685,11 +735,11 @@ export default function AdminDashboard() {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-yellow-800">
-                  Database Connection Issue
+                  No Data Available
                 </h3>
                 <div className="mt-2 text-sm text-yellow-700">
                   <p>
-                    The database is currently not connected. You can still use the admin interface, but data will not be saved or loaded from the database.
+                    No stores or service providers found in the database. The dashboard will show real data once entities are registered.
                   </p>
                 </div>
               </div>
@@ -730,31 +780,37 @@ export default function AdminDashboard() {
               <CardTitle>Issues by Category</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {categoryData.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-4 h-4 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm font-medium">{item.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
+              {categoryData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No category data available</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {categoryData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
                         <div 
-                          className="h-2 rounded-full"
-                          style={{ 
-                            width: `${item.value}%`,
-                            backgroundColor: item.color 
-                          }}
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: item.color }}
                         />
+                        <span className="text-sm font-medium">{item.name}</span>
                       </div>
-                      <span className="text-sm text-gray-600 w-8">{item.value}%</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="h-2 rounded-full"
+                            style={{ 
+                              width: `${item.value}%`,
+                              backgroundColor: item.color 
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm text-gray-600 w-8">{item.value}%</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -764,31 +820,37 @@ export default function AdminDashboard() {
               <CardTitle>Issues by Priority</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {priorityData.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-4 h-4 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm font-medium">{item.name} Priority</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
+              {priorityData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No priority data available</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {priorityData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
                         <div 
-                          className="h-2 rounded-full"
-                          style={{ 
-                            width: `${item.value}%`,
-                            backgroundColor: item.color 
-                          }}
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: item.color }}
                         />
+                        <span className="text-sm font-medium">{item.name} Priority</span>
                       </div>
-                      <span className="text-sm text-gray-600 w-8">{item.value}%</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="h-2 rounded-full"
+                            style={{ 
+                              width: `${item.value}%`,
+                              backgroundColor: item.color 
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm text-gray-600 w-8">{item.value}%</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -801,16 +863,22 @@ export default function AdminDashboard() {
               <CardTitle>Ticket Trends (Last 7 Days)</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={ticketTrendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="tickets" stroke="#3B82F6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              {ticketTrendData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No trend data available</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={ticketTrendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="tickets" stroke="#3B82F6" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -820,17 +888,23 @@ export default function AdminDashboard() {
               <CardTitle>Ticket Status Breakdown</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={ticketStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                    {ticketStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={["#3B82F6", "#10B981", "#F59E0B", "#22D3EE", "#EF4444"][index % 5]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              {ticketStatusData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No status data available</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={ticketStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {ticketStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={["#3B82F6", "#10B981", "#F59E0B", "#22D3EE", "#EF4444"][index % 5]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -840,16 +914,22 @@ export default function AdminDashboard() {
               <CardTitle>SLA Compliance (Last 7 Days)</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={slaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis domain={[80, 100]} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="sla" stroke="#10B981" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              {slaData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No SLA data available</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={slaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis domain={[80, 100]} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="sla" stroke="#10B981" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -859,16 +939,22 @@ export default function AdminDashboard() {
               <CardTitle>Technician Performance</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={techPerformanceData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="completed" fill="#F59E0B" />
-                </BarChart>
-              </ResponsiveContainer>
+              {techPerformanceData.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No performance data available</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={techPerformanceData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="completed" fill="#F59E0B" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -880,21 +966,42 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                <span className="text-sm">New store registration: Austin Neighborhood Market</span>
-                <span className="text-xs text-gray-500 ml-auto">2 hours ago</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <span className="text-sm">Service provider approved: Quick Fix Solutions</span>
-                <span className="text-xs text-gray-500 ml-auto">4 hours ago</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-yellow-50 rounded-lg">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full" />
-                <span className="text-sm">SLA breach alert: Ticket #123 exceeded deadline</span>
-                <span className="text-xs text-gray-500 ml-auto">6 hours ago</span>
-              </div>
+              {totalStores === 0 && totalProviders === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No recent activity. Data will appear here once stores and service providers are registered.</p>
+                </div>
+              ) : (
+                <>
+                  {pendingStores.length > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                      <span className="text-sm">{pendingStores.length} pending store registration(s) awaiting approval</span>
+                      <span className="text-xs text-gray-500 ml-auto">Recent</span>
+                    </div>
+                  )}
+                  {providers.filter((p: any) => p.registration_status === 'PENDING').length > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-yellow-50 rounded-lg">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full" />
+                      <span className="text-sm">{providers.filter((p: any) => p.registration_status === 'PENDING').length} pending service provider registration(s) awaiting approval</span>
+                      <span className="text-xs text-gray-500 ml-auto">Recent</span>
+                    </div>
+                  )}
+                  {openTickets > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
+                      <div className="w-2 h-2 bg-red-500 rounded-full" />
+                      <span className="text-sm">{openTickets} open ticket(s) requiring attention</span>
+                      <span className="text-xs text-gray-500 ml-auto">Active</span>
+                    </div>
+                  )}
+                  {completedTickets > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                      <span className="text-sm">{completedTickets} ticket(s) completed successfully</span>
+                      <span className="text-xs text-gray-500 ml-auto">Recent</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </CardContent>
         </Card>

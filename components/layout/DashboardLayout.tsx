@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = useSession();
 
   const handleLogout = () => {
@@ -63,6 +64,10 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
       case 'MODERATOR': return 'Moderator';
       default: return role;
     }
+  };
+
+  const isActiveRoute = (route: string) => {
+    return pathname === route || (pathname && pathname.startsWith(route + '/'));
   };
 
   if (!session?.user) {
@@ -130,10 +135,18 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
 
           {/* Navigation */}
           <div className="flex-1 p-4">
-            <nav className="space-y-2">
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Navigation</h3>
+            </div>
+            <nav className="space-y-1">
+              {/* Dashboard */}
               <Button
-                variant="ghost"
-                className="w-full justify-start text-left"
+                variant={isActiveRoute('/store') || isActiveRoute('/technician') || isActiveRoute('/admin') || isActiveRoute('/moderator') ? 'secondary' : 'ghost'}
+                className={`w-full justify-start text-left ${
+                  isActiveRoute('/store') || isActiveRoute('/technician') || isActiveRoute('/admin') || isActiveRoute('/moderator') 
+                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                    : 'hover:bg-blue-50 hover:text-blue-700'
+                }`}
                 onClick={() => {
                   switch (session.user.role) {
                     case 'STORE_REGISTER': router.push('/store'); break;
@@ -147,9 +160,14 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 Dashboard
               </Button>
               
+              {/* Tickets */}
               <Button
-                variant="ghost"
-                className="w-full justify-start text-left"
+                variant={isActiveRoute('/store/tickets') || isActiveRoute('/technician/tickets') || isActiveRoute('/admin/tickets') || isActiveRoute('/moderator/tickets') ? 'secondary' : 'ghost'}
+                className={`w-full justify-start text-left ${
+                  isActiveRoute('/store/tickets') || isActiveRoute('/technician/tickets') || isActiveRoute('/admin/tickets') || isActiveRoute('/moderator/tickets')
+                    ? 'bg-green-50 text-green-700 border-green-200' 
+                    : 'hover:bg-green-50 hover:text-green-700'
+                }`}
                 onClick={() => {
                   switch (session.user.role) {
                     case 'STORE_REGISTER': router.push('/store/tickets'); break;
@@ -163,10 +181,11 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 Tickets
               </Button>
 
+              {/* Role-specific navigation */}
               {session.user.role === 'STORE_REGISTER' && (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start text-left"
+                  className="w-full justify-start text-left hover:bg-orange-50 hover:text-orange-700"
                   onClick={() => router.push('/store/create-ticket')}
                 >
                   <Bell className="h-4 w-4 mr-3" />
@@ -176,8 +195,12 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
 
               {(session.user.role === 'ADMIN' || session.user.role === 'MODERATOR') && (
                 <Button
-                  variant="ghost"
-                  className="w-full justify-start text-left"
+                  variant={isActiveRoute('/admin/analytics') || isActiveRoute('/moderator/analytics') ? 'secondary' : 'ghost'}
+                  className={`w-full justify-start text-left ${
+                    isActiveRoute('/admin/analytics') || isActiveRoute('/moderator/analytics')
+                      ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                      : 'hover:bg-purple-50 hover:text-purple-700'
+                  }`}
                   onClick={() => {
                     if (session.user.role === 'ADMIN') router.push('/admin/analytics');
                     else router.push('/moderator/analytics');
@@ -187,11 +210,60 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                   Analytics
                 </Button>
               )}
+
+              {/* Admin-specific navigation */}
+              {session.user.role === 'ADMIN' && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-left hover:bg-indigo-50 hover:text-indigo-700"
+                    onClick={() => router.push('/admin')}
+                  >
+                    <Shield className="h-4 w-4 mr-3" />
+                    User Management
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-left hover:bg-pink-50 hover:text-pink-700"
+                    onClick={() => router.push('/admin')}
+                  >
+                    <Settings className="h-4 w-4 mr-3" />
+                    System Settings
+                  </Button>
+                </>
+              )}
+
+              {/* Moderator-specific navigation */}
+              {session.user.role === 'MODERATOR' && (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-left hover:bg-teal-50 hover:text-teal-700"
+                  onClick={() => router.push('/moderator')}
+                >
+                  <Users className="h-4 w-4 mr-3" />
+                  Provider Approvals
+                </Button>
+              )}
+
+              {/* Service Provider-specific navigation */}
+              {session.user.role === 'SERVICE_PROVIDER' && (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-left hover:bg-cyan-50 hover:text-cyan-700"
+                  onClick={() => router.push('/technician')}
+                >
+                  <Users className="h-4 w-4 mr-3" />
+                  My Profile
+                </Button>
+              )}
             </nav>
           </div>
 
           {/* Logout */}
-          <div className="p-4 border-t">
+          <div className="p-4 border-t bg-gray-50">
+            <div className="mb-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</h3>
+            </div>
             <Button
               variant="ghost"
               className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"

@@ -29,7 +29,7 @@ export async function POST(
 
     await aiOrchestrator.handleTicketRejection(
       params.id,
-      session.user.associated_entity_id!,
+      session.user.associated_provider_id!,
       validatedData.reason
     );
 

@@ -3,8 +3,8 @@ import { availabilityAgent } from './agents/availability-agent';
 import { routingAgent } from './agents/routing-agent';
 import { escalationAgent } from './agents/escalation-agent';
 import { prisma } from '@/lib/prisma';
-// Import TicketPriority from Prisma client
-import { TicketPriority } from '@prisma/client';
+// Import TicketPriority and TicketStatus from Prisma client
+import { TicketPriority, TicketStatus } from '@prisma/client';
 
 export class AIOrchestrator {
   async processNewTicket(ticketData: {
@@ -165,6 +165,12 @@ export class AIOrchestrator {
 
   async handleTicketRejection(ticketId: string, providerId: string, reason: string) {
     try {
+      // Get service provider details for the remark
+      const serviceProvider = await prisma.serviceProvider.findUnique({
+        where: { id: providerId },
+        select: { company_name: true }
+      });
+
       // Update ticket assignment
       await prisma.ticketAssignment.updateMany({
         where: {
@@ -176,6 +182,21 @@ export class AIOrchestrator {
           status: 'REJECTED',
           rejected_at: new Date(),
           rejection_reason: reason
+        }
+      });
+
+      // Update ticket status to REJECTED_BY_TECH
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: { status: 'REJECTED_BY_TECH' }
+      });
+
+      // Add a remark to notify the store about the rejection
+      await prisma.remark.create({
+        data: {
+          ticket_id: ticketId,
+          user_id: providerId, // Using provider ID as user ID for system remarks
+          remark_text: `🚫 Ticket rejected by ${serviceProvider?.company_name || 'Service Provider'}. Reason: ${reason}`
         }
       });
 
@@ -226,11 +247,35 @@ export class AIOrchestrator {
           storeLocation,
           otherProviders
         );
+
+        // Update ticket status back to ASSIGNED since it's been re-routed
+        await prisma.ticket.update({
+          where: { id: ticketId },
+          data: { status: 'ASSIGNED' }
+        });
+
+        // Add remark about re-routing
+        await prisma.remark.create({
+          data: {
+            ticket_id: ticketId,
+            user_id: providerId, // Using provider ID as user ID for system remarks
+            remark_text: `🔄 Ticket has been re-routed to another service provider.`
+          }
+        });
       } else {
         // No other providers available, mark for escalation
         await prisma.ticket.update({
           where: { id: ticketId },
           data: { status: 'ESCALATED' }
+        });
+
+        // Add remark about escalation
+        await prisma.remark.create({
+          data: {
+            ticket_id: ticketId,
+            user_id: providerId, // Using provider ID as user ID for system remarks
+            remark_text: `⚠️ No available service providers found. Ticket has been escalated to management.`
+          }
         });
       }
 
@@ -247,7 +292,7 @@ export class AIOrchestrator {
       await prisma.ticket.update({
         where: { id: ticketId },
         data: {
-          status: 'PENDING_APPROVAL'
+          status: 'COMPLETED'
           // Do not set completed_at yet
         }
       });
@@ -262,7 +307,7 @@ export class AIOrchestrator {
         }
       });
 
-      console.log(`Ticket ${ticketId} marked as pending approval by provider ${providerId}`);
+      console.log(`Ticket ${ticketId} marked as completed by provider ${providerId}`);
     } catch (error) {
       console.error('Error handling ticket completion:', error);
       throw error;

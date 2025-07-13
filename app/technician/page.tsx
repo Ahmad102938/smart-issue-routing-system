@@ -17,29 +17,43 @@ import {
   Settings,
   Briefcase,
   TrendingUp,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
-import { mockTickets, mockServiceProviders } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
+
+interface Ticket {
+  id: string;
+  description: string;
+  status: string;
+  ai_priority: string;
+  location_in_store: string;
+  ai_classification_category: string;
+  created_at: string;
+  completed_at?: string;
+  assigned_service_provider_id?: string;
+}
+
+interface ServiceProvider {
+  id: string;
+  company_name: string;
+  current_load: number;
+  capacity_per_day: number;
+  skills: string[];
+  unique_company_id: string;
+}
 
 export default function TechnicianDashboard() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [capacity, setCapacity] = useState(5);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [serviceProvider, setServiceProvider] = useState<ServiceProvider | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   
-  // Get current service provider from session data or mock data
-  const serviceProvider = session?.user?.service_provider || mockServiceProviders.find(p => p.id === session?.user?.associated_entity_id);
-  
-  // Filter tickets for this technician
-  const myTickets = mockTickets.filter(t => t.assigned_service_provider_id === session?.user?.associated_entity_id || session?.user?.service_provider?.id);
-  const inProgressTickets = myTickets.filter(t => t.status === 'in_progress');
-  const completedToday = myTickets.filter(t => 
-    t.status === 'completed' && 
-    new Date(t.completed_at || '').toDateString() === new Date().toDateString()
-  );
-
   // Load capacity from localStorage if available
   useEffect(() => {
     const stored = localStorage.getItem('technician_capacity');
@@ -48,17 +62,93 @@ export default function TechnicianDashboard() {
 
   const [pendingCapacity, setPendingCapacity] = useState(capacity);
 
+  // Fetch real data
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!session?.user?.associated_provider_id) return;
+      
+      try {
+        setLoading(true);
+        
+        // Fetch tickets for this technician
+        const ticketsResponse = await fetch('/api/tickets');
+        if (ticketsResponse.ok) {
+          const ticketsData = await ticketsResponse.json();
+          setTickets(ticketsData);
+        }
+        
+        // Fetch service provider details
+        const providerResponse = await fetch(`/api/service-providers/${session.user.associated_provider_id}`);
+        if (providerResponse.ok) {
+          const providerData = await providerResponse.json();
+          setServiceProvider(providerData);
+        }
+        
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (session?.user) {
+      fetchData();
+    }
+  }, [session]);
+
+  // Filter tickets for this technician
+  const myTickets = tickets.filter(t => t.assigned_service_provider_id === session?.user?.associated_provider_id);
+  const inProgressTickets = myTickets.filter(t => t.status === 'IN_PROGRESS');
+  const completedToday = myTickets.filter(t => 
+    t.status === 'COMPLETED' && 
+    t.completed_at &&
+    new Date(t.completed_at).toDateString() === new Date().toDateString()
+  );
+
   const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPendingCapacity(Number(e.target.value));
   };
 
-  const handleUpdateCapacity = () => {
-    setCapacity(pendingCapacity);
-    localStorage.setItem('technician_capacity', String(pendingCapacity));
-    toast({
-      title: 'Capacity Updated',
-      description: `Your daily capacity is now set to ${pendingCapacity} tickets.`,
-    });
+  const handleUpdateCapacity = async () => {
+    try {
+      // Update capacity in the database
+      const response = await fetch(`/api/service-providers/${session?.user?.associated_provider_id}/capacity`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capacity: pendingCapacity })
+      });
+      
+      if (response.ok) {
+        setCapacity(pendingCapacity);
+        localStorage.setItem('technician_capacity', String(pendingCapacity));
+        toast({
+          title: 'Capacity Updated',
+          description: `Your daily capacity is now set to ${pendingCapacity} tickets.`,
+        });
+        
+        // Refresh service provider data
+        if (session?.user?.associated_provider_id) {
+          const providerResponse = await fetch(`/api/service-providers/${session.user.associated_provider_id}`);
+          if (providerResponse.ok) {
+            const providerData = await providerResponse.json();
+            setServiceProvider(providerData);
+          }
+        }
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to update capacity',
+          variant: 'destructive'
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update capacity',
+        variant: 'destructive'
+      });
+    }
   };
 
   useEffect(() => {
@@ -97,24 +187,28 @@ export default function TechnicianDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'assigned': return 'bg-blue-100 text-blue-800';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800';
-      case 'completed': return 'bg-green-100 text-green-800';
+      case 'ASSIGNED': return 'bg-blue-100 text-blue-800';
+      case 'IN_PROGRESS': return 'bg-yellow-100 text-yellow-800';
+      case 'COMPLETED': return 'bg-green-100 text-green-800';
+      case 'REJECTED_BY_TECH': return 'bg-red-100 text-red-800';
+      case 'ESCALATED': return 'bg-orange-100 text-orange-800';
+      case 'PENDING_APPROVAL': return 'bg-purple-100 text-purple-800';
+      case 'CLOSED': return 'bg-gray-100 text-gray-600';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
+      case 'HIGH': return 'bg-red-100 text-red-800';
+      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800';
+      case 'LOW': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   // Loading state
-  if (status === 'loading') {
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -279,7 +373,7 @@ export default function TechnicianDashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {serviceProvider.skills.map((skill: string) => (
+                {serviceProvider.skills && Array.isArray(serviceProvider.skills) && serviceProvider.skills.map((skill: string) => (
                   <Badge key={skill} variant="outline" className="border-emerald-200 text-emerald-700">
                     {skill}
                   </Badge>
@@ -361,6 +455,14 @@ export default function TechnicianDashboard() {
                   </div>
                 </div>
               ))}
+              
+              {myTickets.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Ticket className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No assignments yet</p>
+                  <p className="text-sm">New tickets will appear here when assigned to you</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

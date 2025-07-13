@@ -133,6 +133,14 @@ export async function GET(request: NextRequest) {
             rejection_reason: true,
             status: true
           }
+        },
+        remarks: {
+          orderBy: { created_at: 'desc' },
+          include: {
+            user: {
+              select: { id: true, username: true, role: true }
+            }
+          }
         }
       },
       orderBy: { created_at: 'desc' }
