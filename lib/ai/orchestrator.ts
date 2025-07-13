@@ -3,8 +3,8 @@ import { availabilityAgent } from './agents/availability-agent';
 import { routingAgent } from './agents/routing-agent';
 import { escalationAgent } from './agents/escalation-agent';
 import { prisma } from '@/lib/prisma';
-// Define TicketPriority type locally if not exported by Prisma
-type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+// Import TicketPriority from Prisma client
+import { TicketPriority } from '@prisma/client';
 
 export class AIOrchestrator {
   async processNewTicket(ticketData: {
@@ -58,13 +58,32 @@ export class AIOrchestrator {
       );
 
       if (availableProviders.length === 0) {
-        console.log('No available providers found');
+        console.log('No available providers found - this should not happen with the updated availability agent');
         return {
           ticket,
           classification,
           assigned: false,
-          reason: 'No available providers with required skills'
+          reason: 'No service providers available in the system'
         };
+      }
+
+      // Check if any providers have good skill matches
+      const providersWithGoodSkills = availableProviders.filter(p => (p.skillMatchScore || 0) > 0.5);
+      const bestProvider = availableProviders[0];
+      
+      console.log(`\n📊 Provider Analysis:`);
+      console.log(`- Total providers available: ${availableProviders.length}`);
+      console.log(`- Providers with good skill matches (>50%): ${providersWithGoodSkills.length}`);
+      console.log(`- Required skills: ${requiredSkills.join(', ')}`);
+      
+      if (providersWithGoodSkills.length === 0) {
+        console.log(`⚠️  No providers with exact skill matches, but proceeding with best available provider`);
+        console.log(`🎯 Best available provider: ${bestProvider.company_name}`);
+        console.log(`   - Skill match: ${(bestProvider.skillMatchScore || 0) * 100}%`);
+        console.log(`   - Overall score: ${(bestProvider.overallScore || 0).toFixed(2)}`);
+        console.log(`   - Available skills: ${bestProvider.skills.join(', ')}`);
+      } else {
+        console.log(`✅ Found ${providersWithGoodSkills.length} providers with good skill matches`);
       }
 
       // Step 6: Route to best provider
@@ -228,8 +247,8 @@ export class AIOrchestrator {
       await prisma.ticket.update({
         where: { id: ticketId },
         data: {
-          status: 'COMPLETED',
-          completed_at: new Date()
+          status: 'PENDING_APPROVAL'
+          // Do not set completed_at yet
         }
       });
 
@@ -243,7 +262,7 @@ export class AIOrchestrator {
         }
       });
 
-      console.log(`Ticket ${ticketId} completed by provider ${providerId}`);
+      console.log(`Ticket ${ticketId} marked as pending approval by provider ${providerId}`);
     } catch (error) {
       console.error('Error handling ticket completion:', error);
       throw error;

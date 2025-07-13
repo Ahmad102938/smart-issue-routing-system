@@ -2,6 +2,7 @@
 
 import { ReactNode, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -17,8 +18,6 @@ import {
   BarChart3,
   Bell
 } from 'lucide-react';
-import { getCurrentUser, logout } from '@/lib/auth';
-import { User } from '@/types';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -28,48 +27,49 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
-  const user = getCurrentUser();
+  const { data: session } = useSession();
 
   const handleLogout = () => {
-    logout();
-    router.push('/');
+    // Set flag to prevent auto-redirect after signout
+    sessionStorage.setItem('justSignedOut', 'true');
+    signOut({ callbackUrl: '/auth/signin' });
   };
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case 'store_register': return Building2;
-      case 'service_provider': return Users;
-      case 'admin': return Shield;
-      case 'moderator': return Settings;
+      case 'STORE_REGISTER': return Building2;
+      case 'SERVICE_PROVIDER': return Users;
+      case 'ADMIN': return Shield;
+      case 'MODERATOR': return Settings;
       default: return Building2;
     }
   };
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'store_register': return 'text-blue-600 bg-blue-50';
-      case 'service_provider': return 'text-emerald-600 bg-emerald-50';
-      case 'admin': return 'text-purple-600 bg-purple-50';
-      case 'moderator': return 'text-orange-600 bg-orange-50';
+      case 'STORE_REGISTER': return 'text-blue-600 bg-blue-50';
+      case 'SERVICE_PROVIDER': return 'text-emerald-600 bg-emerald-50';
+      case 'ADMIN': return 'text-purple-600 bg-purple-50';
+      case 'MODERATOR': return 'text-orange-600 bg-orange-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   };
 
   const getRoleDisplayName = (role: string) => {
     switch (role) {
-      case 'store_register': return 'Store Register';
-      case 'service_provider': return 'Service Provider';
-      case 'admin': return 'Administrator';
-      case 'moderator': return 'Moderator';
+      case 'STORE_REGISTER': return 'Store Register';
+      case 'SERVICE_PROVIDER': return 'Service Provider';
+      case 'ADMIN': return 'Administrator';
+      case 'MODERATOR': return 'Moderator';
       default: return role;
     }
   };
 
-  if (!user) {
+  if (!session?.user) {
     return null;
   }
 
-  const RoleIcon = getRoleIcon(user.role);
+  const RoleIcon = getRoleIcon(session.user.role);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -102,17 +102,28 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
           <div className="p-6 border-b">
             <div className="flex items-center gap-3">
               <Avatar>
-                <AvatarFallback className={getRoleColor(user.role)}>
+                <AvatarFallback className={getRoleColor(session.user.role)}>
                   <RoleIcon className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user.username}
+                  {session.user.username || session.user.email}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {getRoleDisplayName(user.role)}
+                  {getRoleDisplayName(session.user.role)}
                 </p>
+                {/* Show store/service provider info if available */}
+                {session.user.store && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {session.user.store.name}
+                  </p>
+                )}
+                {session.user.service_provider && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    {session.user.service_provider.company_name}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -124,11 +135,11 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 variant="ghost"
                 className="w-full justify-start text-left"
                 onClick={() => {
-                  switch (user.role) {
-                    case 'store_register': router.push('/store'); break;
-                    case 'service_provider': router.push('/technician'); break;
-                    case 'admin': router.push('/admin'); break;
-                    case 'moderator': router.push('/moderator'); break;
+                  switch (session.user.role) {
+                    case 'STORE_REGISTER': router.push('/store'); break;
+                    case 'SERVICE_PROVIDER': router.push('/technician'); break;
+                    case 'ADMIN': router.push('/admin'); break;
+                    case 'MODERATOR': router.push('/moderator'); break;
                   }
                 }}
               >
@@ -140,11 +151,11 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 variant="ghost"
                 className="w-full justify-start text-left"
                 onClick={() => {
-                  switch (user.role) {
-                    case 'store_register': router.push('/store/tickets'); break;
-                    case 'service_provider': router.push('/technician/tickets'); break;
-                    case 'admin': router.push('/admin/tickets'); break;
-                    case 'moderator': router.push('/moderator/tickets'); break;
+                  switch (session.user.role) {
+                    case 'STORE_REGISTER': router.push('/store/tickets'); break;
+                    case 'SERVICE_PROVIDER': router.push('/technician/tickets'); break;
+                    case 'ADMIN': router.push('/admin/tickets'); break;
+                    case 'MODERATOR': router.push('/moderator/tickets'); break;
                   }
                 }}
               >
@@ -152,7 +163,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 Tickets
               </Button>
 
-              {user.role === 'store_register' && (
+              {session.user.role === 'STORE_REGISTER' && (
                 <Button
                   variant="ghost"
                   className="w-full justify-start text-left"
@@ -163,12 +174,12 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 </Button>
               )}
 
-              {(user.role === 'admin' || user.role === 'moderator') && (
+              {(session.user.role === 'ADMIN' || session.user.role === 'MODERATOR') && (
                 <Button
                   variant="ghost"
                   className="w-full justify-start text-left"
                   onClick={() => {
-                    if (user.role === 'admin') router.push('/admin/analytics');
+                    if (session.user.role === 'ADMIN') router.push('/admin/analytics');
                     else router.push('/moderator/analytics');
                   }}
                 >
@@ -204,14 +215,14 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
           >
             <Menu className="h-5 w-5" />
           </Button>
-          {title && <h1 className="font-semibold text-gray-900">{title}</h1>}
+          <h1 className="text-lg font-semibold">{title}</h1>
           <div className="w-10" /> {/* Spacer */}
         </div>
 
         {/* Content */}
-        <main className="p-6">
+        <div className="p-6">
           {children}
-        </main>
+        </div>
       </div>
     </div>
   );

@@ -109,7 +109,7 @@ export async function getTicketContext(ticketId: string, user: any) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) return {};
   return {
-    assigned_to_self: ticket.assigned_service_provider_id === user.associated_entity_id,
-    own_store: ticket.store_id === user.associated_entity_id
+    assigned_to_self: ticket.assigned_service_provider_id === (user.associated_provider_id || user.associated_entity_id),
+    own_store: ticket.store_id === (user.associated_store_id || user.associated_entity_id)
   };
 }

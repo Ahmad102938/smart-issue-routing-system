@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth/config';
 import { requirePermission } from '@/lib/auth/rbac';
 import { aiOrchestrator } from '@/lib/ai/orchestrator';
 import { getTicketContext } from '@/lib/auth/rbac';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(
   request: NextRequest,
@@ -21,7 +22,7 @@ export async function POST(
 
     await aiOrchestrator.handleTicketCompletion(
       params.id,
-      session.user.associated_entity_id!
+      session.user.associated_provider_id!
     );
 
     return NextResponse.json({ success: true });

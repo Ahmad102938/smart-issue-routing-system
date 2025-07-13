@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { QrCode, Camera, AlertTriangle, Clock, CheckCircle } from 'lucide-react';
+import { QrCode, Camera, AlertTriangle, Clock, CheckCircle, Building2 } from 'lucide-react';
 import { classifyIssue, calculateSLADeadline } from '@/lib/mockData';
-import { getCurrentUser } from '@/lib/auth';
 import { useRef } from 'react';
 
 export default function CreateTicketForm() {
@@ -22,8 +22,9 @@ export default function CreateTicketForm() {
   const [classification, setClassification] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [createdTicket, setCreatedTicket] = useState<any>(null);
   const router = useRouter();
-  const user = getCurrentUser();
+  const { data: session } = useSession();
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,18 +70,48 @@ export default function CreateTicketForm() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Mock API call, now includes images
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    // In real app, upload images to server or cloud storage here
-    // and include their URLs in the ticket payload
+    try {
+      // Prepare the payload for the API
+      const ticketPayload = {
+        description: description,
+        location_in_store: location,
+        qr_asset_id: qrAssetId || undefined
+      };
 
-    setSubmitted(true);
-    setIsSubmitting(false);
+      console.log('Submitting ticket payload:', ticketPayload);
 
-    // Redirect after 3 seconds
-    setTimeout(() => {
-      router.push('/store/tickets');
-    }, 3000);
+      // Call the real API endpoint
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(ticketPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create ticket');
+      }
+
+      const result = await response.json();
+      console.log('Ticket created successfully:', result);
+
+      setCreatedTicket(result.ticket);
+      setSubmitted(true);
+      setIsSubmitting(false);
+
+      // Redirect after 3 seconds
+      setTimeout(() => {
+        router.push('/store/tickets');
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error creating ticket:', error);
+      setIsSubmitting(false);
+      // You could add error state handling here
+      alert('Failed to create ticket. Please try again.');
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -102,10 +133,15 @@ export default function CreateTicketForm() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Ticket Created Successfully!</h2>
           <p className="text-gray-600 mb-4">Your issue has been reported and assigned to a technician.</p>
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-sm text-gray-600">Ticket ID: <span className="font-mono font-semibold">#TKT-{Date.now().toString().slice(-6)}</span></p>
-            {classification && (
+            <p className="text-sm text-gray-600">Ticket ID: <span className="font-mono font-semibold">#{createdTicket?.id || 'TKT-' + Date.now().toString().slice(-6)}</span></p>
+            {createdTicket?.ai_priority && (
               <p className="text-sm text-gray-600 mt-1">
-                Priority: <Badge className={getPriorityColor(classification.priority)}>{classification.priority.toUpperCase()}</Badge>
+                Priority: <Badge className={getPriorityColor(createdTicket.ai_priority.toLowerCase())}>{createdTicket.ai_priority}</Badge>
+              </p>
+            )}
+            {createdTicket?.assigned && (
+              <p className="text-sm text-green-600 mt-1">
+                ✓ Assigned to technician
               </p>
             )}
           </div>
@@ -125,6 +161,19 @@ export default function CreateTicketForm() {
         <CardDescription>
           Describe the problem you&apos;re experiencing and we&apos;ll route it to the right technician
         </CardDescription>
+        {/* Store Information */}
+        {session?.user?.store && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-2 text-sm text-blue-800">
+              <Building2 className="h-4 w-4" />
+              <span className="font-medium">{session.user.store.name}</span>
+              <span>•</span>
+              <span>{session.user.store.city}, {session.user.store.state}</span>
+              <span>•</span>
+              <span className="text-xs">Store ID: {session.user.store.store_id}</span>
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">

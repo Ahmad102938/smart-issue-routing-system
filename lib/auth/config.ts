@@ -48,7 +48,8 @@ export const authOptions: NextAuthOptions = {
             username: user.username,
             email: user.email,
             role: user.role,
-            associated_entity_id: user.associated_entity_id || '',
+            associated_store_id: user.associated_store_id || '',
+            associated_provider_id: user.associated_provider_id || '',
             store: user.store,
             service_provider: user.service_provider,
             force_password_change: true as boolean
@@ -70,7 +71,8 @@ export const authOptions: NextAuthOptions = {
           username: user.username,
           email: user.email,
           role: user.role,
-          associated_entity_id: user.associated_entity_id || '',
+          associated_store_id: user.associated_store_id || '',
+          associated_provider_id: user.associated_provider_id || '',
           store: user.store,
           service_provider: user.service_provider,
           force_password_change: false as boolean
@@ -85,7 +87,8 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
-        token.associated_entity_id = user.associated_entity_id;
+        token.associated_store_id = user.associated_store_id;
+        token.associated_provider_id = user.associated_provider_id;
         token.store = user.store;
         token.service_provider = user.service_provider;
         (token as any).force_password_change = (user as any).force_password_change;
@@ -96,7 +99,8 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.sub!;
         session.user.role = token.role as UserRole;
-        session.user.associated_entity_id = token.associated_entity_id as string;
+        session.user.associated_store_id = token.associated_store_id as string;
+        session.user.associated_provider_id = token.associated_provider_id as string;
         session.user.store = token.store;
         session.user.service_provider = token.service_provider;
         (session.user as any).force_password_change = (token as any).force_password_change;

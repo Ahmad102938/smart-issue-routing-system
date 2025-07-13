@@ -1,7 +1,5 @@
-import { ChatOpenAI } from '@langchain/openai';
-import { StateGraph, END } from '@langchain/langgraph';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
-import { StructuredOutputParser } from 'langchain/output_parsers';
 
 // Classification schema
 const ClassificationSchema = z.object({
@@ -14,41 +12,100 @@ const ClassificationSchema = z.object({
 
 type Classification = z.infer<typeof ClassificationSchema>;
 
-interface ClassificationState {
-  description: string;
-  classification?: Classification;
-  error?: string;
-}
-
 export class ClassificationAgent {
-  private model: ChatOpenAI;
-  private parser: StructuredOutputParser<Classification>;
-  private graph: StateGraph<ClassificationState>;
+  private model: GoogleGenerativeAI | null = null;
+  private genModel: any = null;
+  private useMock: boolean = false;
 
   constructor() {
-    this.model = new ChatOpenAI({
-      modelName: 'gpt-4',
-      temperature: 0.1,
-      openAIApiKey: process.env.OPENAI_API_KEY
-    });
-
-    this.parser = StructuredOutputParser.fromZodSchema(ClassificationSchema);
-    this.graph = this.buildGraph();
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey && apiKey.trim() !== '') {
+      try {
+        this.model = new GoogleGenerativeAI(apiKey);
+        this.genModel = this.model.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        this.useMock = false;
+      } catch (error) {
+        console.warn('Failed to initialize Gemini AI, falling back to mock classification:', error);
+        this.useMock = true;
+      }
+    } else {
+      console.warn('No Gemini API key provided, using mock classification');
+      this.useMock = true;
+    }
   }
 
-  private buildGraph(): StateGraph<ClassificationState> {
-    const graph = new StateGraph<ClassificationState>({
-      channels: {
-        description: null,
-        classification: null,
-        error: null
-      }
-    });
+  private mockClassify(description: string): Classification {
+    const lowerDesc = description.toLowerCase();
+    
+    // Simple keyword-based classification
+    if (lowerDesc.includes('freezer') || lowerDesc.includes('refrigerator') || lowerDesc.includes('cooling')) {
+      return {
+        category: 'Facilities',
+        subcategory: 'Cold Storage',
+        priority: 'HIGH',
+        confidence: 0.85,
+        reasoning: 'Freezer/refrigeration issues pose product spoilage risk'
+      };
+    }
+    
+    if (lowerDesc.includes('electrical') || lowerDesc.includes('light') || lowerDesc.includes('power')) {
+      return {
+        category: 'Facilities',
+        subcategory: 'Electrical',
+        priority: 'MEDIUM',
+        confidence: 0.80,
+        reasoning: 'Electrical issues may affect store operations'
+      };
+    }
+    
+    if (lowerDesc.includes('pos') || lowerDesc.includes('checkout') || lowerDesc.includes('terminal')) {
+      return {
+        category: 'IT',
+        subcategory: 'POS Systems',
+        priority: 'HIGH',
+        confidence: 0.90,
+        reasoning: 'POS system issues directly impact customer transactions'
+      };
+    }
+    
+    if (lowerDesc.includes('network') || lowerDesc.includes('wifi') || lowerDesc.includes('internet')) {
+      return {
+        category: 'IT',
+        subcategory: 'Network',
+        priority: 'MEDIUM',
+        confidence: 0.75,
+        reasoning: 'Network issues affect multiple systems'
+      };
+    }
+    
+    if (lowerDesc.includes('cart') || lowerDesc.includes('shelf') || lowerDesc.includes('equipment')) {
+      return {
+        category: 'Equipment',
+        subcategory: 'General Equipment',
+        priority: 'LOW',
+        confidence: 0.70,
+        reasoning: 'General equipment maintenance issue'
+      };
+    }
+    
+    // Default classification
+    return {
+      category: 'General',
+      subcategory: 'Maintenance',
+      priority: 'MEDIUM',
+      confidence: 0.60,
+      reasoning: 'General maintenance issue requiring assessment'
+    };
+  }
 
-    // Classification node
-    graph.addNode('classify', async (state: ClassificationState) => {
-      try {
-        const prompt = `
+  async classify(description: string): Promise<Classification> {
+    try {
+      if (this.useMock || !this.genModel) {
+        console.log('Using mock classification');
+        return this.mockClassify(description);
+      }
+
+      const prompt = `
 You are an expert maintenance issue classifier for Walmart stores. Analyze the following issue description and classify it according to these categories:
 
 CATEGORIES & SUBCATEGORIES:
@@ -80,59 +137,43 @@ PRIORITY RULES:
 - MEDIUM: Partial functionality loss, operational impact, non-critical system issues
 - LOW: Cosmetic issues, minor inconveniences, scheduled maintenance
 
-Issue Description: "${state.description}"
+Issue Description: "${description}"
 
-${this.parser.getFormatInstructions()}
+Please respond with a JSON object in this exact format:
+{
+  "category": "Facilities|IT|Equipment|General",
+  "subcategory": "specific subcategory name",
+  "priority": "HIGH|MEDIUM|LOW",
+  "confidence": 0.95,
+  "reasoning": "explanation for the classification and priority"
+}
 
 Provide your classification with reasoning for the priority level assigned.
-        `;
+      `;
 
-        const response = await this.model.invoke(prompt);
-        const classification = await this.parser.parse(response.content as string);
-
-        return {
-          ...state,
-          classification
-        };
-      } catch (error) {
-        console.error('Classification error:', error);
-        
-        // Fallback classification
-        const fallbackClassification: Classification = {
-          category: 'General',
-          subcategory: 'Maintenance',
-          priority: 'MEDIUM',
-          confidence: 0.3,
-          reasoning: 'Fallback classification due to processing error'
-        };
-
-        return {
-          ...state,
-          classification: fallbackClassification,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        };
+      const result = await this.genModel.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Extract JSON from the response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
       }
-    });
-
-    // Set entry point and edges
-    graph.setEntryPoint('classify');
-    graph.addEdge('classify', END);
-
-    return graph;
-  }
-
-  async classify(description: string): Promise<Classification> {
-    const compiled = this.graph.compile();
-    
-    const result = await compiled.invoke({
-      description
-    });
-
-    if (!result.classification) {
-      throw new Error('Failed to classify issue');
+      
+      const jsonStr = jsonMatch[0];
+      const parsed = JSON.parse(jsonStr);
+      
+      // Validate with Zod schema
+      const classification = ClassificationSchema.parse(parsed);
+      
+      return classification;
+    } catch (error) {
+      console.error('Classification error, falling back to mock:', error);
+      
+      // Fallback to mock classification
+      return this.mockClassify(description);
     }
-
-    return result.classification;
   }
 }
 

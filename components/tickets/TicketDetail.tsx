@@ -19,25 +19,37 @@ import {
   XCircle,
   AlertTriangle
 } from 'lucide-react';
-import { Ticket } from '@/types';
-import { mockStores, mockServiceProviders, mockRemarks } from '@/lib/mockData';
+import { Ticket, Remark, ServiceProvider } from '@/types';
 import { useSession } from 'next-auth/react';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface TicketDetailProps {
-  ticket: Ticket;
+  ticket: Ticket & { remarks?: Remark[]; assigned_provider?: ServiceProvider };
   onBack: () => void;
 }
 
 export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
   const [newRemark, setNewRemark] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [acceptEmpId, setAcceptEmpId] = useState('');
+  const [acceptPhone, setAcceptPhone] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const { data: session } = useSession();
+  // Debug log
+  console.log('TicketDetail debug:', { ticket, session });
   const { toast } = useToast();
 
-  const store = mockStores.find(s => s.id === ticket.store_id);
-  const provider = mockServiceProviders.find(p => p.id === ticket.assigned_service_provider_id);
-  const ticketRemarks = mockRemarks.filter(r => r.ticket_id === ticket.id);
+  // Use real data from the ticket object
+  const store = ticket.store;
+  const provider = ticket.assigned_provider;
+  const ticketRemarks: Remark[] = Array.isArray(ticket.remarks) ? ticket.remarks : []; // Use real remarks from ticket
+  // Get latest assignment info
+  const latestAssignment = Array.isArray(ticket.assignments) && ticket.assignments.length > 0 ? ticket.assignments[0] : null;
 
   const handleAddRemark = async () => {
     if (!newRemark.trim()) return;
@@ -63,61 +75,74 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
     }
   };
 
+  // Helper to refresh ticket data after action
+  const refreshTicket = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/tickets?id=${ticket.id}`);
+      if (res.ok) {
+        // Optionally, you can call a prop or context to refresh parent list
+        // For now, just reload the page
+        window.location.reload();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleAcceptTicket = async () => {
     setIsSubmitting(true);
-    // Mock API call for accepting ticket
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    // In real app, would update ticket status
-    if (session?.user?.role === 'STORE_REGISTER') {
-      toast({
-        title: 'Ticket Accepted',
-        description: 'Your ticket has been accepted by a technician.',
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emp_id: acceptEmpId, phone_number: acceptPhone })
       });
-    }
-    if (session?.user?.role === 'SERVICE_PROVIDER') {
-      toast({
-        title: 'Ticket Accepted',
-        description: 'You have accepted this ticket assignment.',
-      });
+      if (!res.ok) throw new Error('Failed to accept ticket');
+      toast({ title: 'Ticket Accepted', description: 'You have accepted this ticket assignment.' });
+      setShowAcceptModal(false);
+      setAcceptEmpId('');
+      setAcceptPhone('');
+      await refreshTicket();
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to accept ticket', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleRejectTicket = async () => {
     setIsSubmitting(true);
-    // Mock API call for rejecting ticket
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    if (user?.role === 'store_register') {
-      toast({
-        title: 'Ticket Rejected',
-        description: 'Your ticket was rejected by the technician.',
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectReason })
       });
-    }
-    if (user?.role === 'service_provider') {
-      toast({
-        title: 'Ticket Rejected',
-        description: 'You have rejected this ticket assignment.',
-      });
+      if (!res.ok) throw new Error('Failed to reject ticket');
+      toast({ title: 'Ticket Rejected', description: 'You have rejected this ticket assignment.' });
+      setShowRejectModal(false);
+      setRejectReason('');
+      await refreshTicket();
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to reject ticket', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleCompleteTicket = async () => {
     setIsSubmitting(true);
-    // Mock API call for completing ticket
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    if (user?.role === 'store_register') {
-      toast({
-        title: 'Ticket Completed',
-        description: 'Your ticket has been marked as completed.',
-      });
-    }
-    if (user?.role === 'service_provider') {
-      toast({
-        title: 'Ticket Completed',
-        description: 'You have marked this ticket as completed.',
-      });
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/complete`, {
+        method: 'POST' });
+      if (!res.ok) throw new Error('Failed to complete ticket');
+      toast({ title: 'Ticket Completed', description: 'You have marked this ticket as completed.' });
+      await refreshTicket();
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to complete ticket', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -226,18 +251,18 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
           </Card>
 
           {/* Service Provider Actions */}
-          {user?.role === 'service_provider' && ticket.assigned_service_provider_id === user.associated_entity_id && (
+          {session?.user?.role === 'SERVICE_PROVIDER' && ticket.assigned_service_provider_id === session.user.associated_provider_id && (
             <Card>
               <CardHeader>
                 <CardTitle>Actions</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-3">
-                  {ticket.status === 'assigned' && (
+                  {ticket.status === 'ASSIGNED' && (
                     <>
                       <Button
-                        onClick={handleAcceptTicket}
-                        disabled={isSubmitting}
+                        onClick={() => setShowAcceptModal(true)}
+                        disabled={isSubmitting || refreshing}
                         className="bg-green-600 hover:bg-green-700"
                       >
                         <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -245,8 +270,8 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                       </Button>
                       <Button
                         variant="destructive"
-                        onClick={handleRejectTicket}
-                        disabled={isSubmitting}
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={isSubmitting || refreshing}
                       >
                         <XCircle className="h-4 w-4 mr-2" />
                         Reject Ticket
@@ -254,10 +279,10 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                     </>
                   )}
                   
-                  {ticket.status === 'in_progress' && (
+                  {ticket.status === 'IN_PROGRESS' && (
                     <Button
                       onClick={handleCompleteTicket}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || refreshing}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -279,7 +304,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Add Remark (for technicians) */}
-              {user?.role === 'service_provider' && ticket.status === 'in_progress' && (
+              {session?.user?.role === 'SERVICE_PROVIDER' && ticket.status === 'IN_PROGRESS' && (
                 <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
                   <Textarea
                     placeholder="Add a remark about your progress..."
@@ -299,7 +324,7 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
 
               {/* Existing Remarks */}
               <div className="space-y-3">
-                {ticketRemarks.map((remark) => (
+                {ticketRemarks.map((remark: Remark) => (
                   <div key={remark.id} className="p-4 border rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
                       <Avatar className="h-6 w-6">
@@ -341,32 +366,42 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                   <span className="text-gray-600">Created:</span>
                   <span className="font-medium">{formatDateTime(ticket.created_at)}</span>
                 </div>
-                
                 {ticket.assigned_at && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Assigned:</span>
                     <span className="font-medium">{formatDateTime(ticket.assigned_at)}</span>
                   </div>
                 )}
-                
                 {ticket.accepted_at && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Accepted:</span>
                     <span className="font-medium">{formatDateTime(ticket.accepted_at)}</span>
                   </div>
                 )}
-
                 <div className="flex justify-between">
                   <span className="text-gray-600">SLA Deadline:</span>
                   <span className="font-medium">{formatDateTime(ticket.sla_deadline)}</span>
                 </div>
-
                 <Alert className={ticket.status !== 'completed' && new Date() > new Date(ticket.sla_deadline) ? 'border-red-200' : ''}>
                   <Clock className="h-4 w-4" />
                   <AlertDescription>
                     <strong>SLA Status:</strong> {getSLATimeRemaining()}
                   </AlertDescription>
                 </Alert>
+                {/* Assignment Info */}
+                {latestAssignment && latestAssignment.status === 'ACCEPTED' && (
+                  <div className="p-3 rounded bg-emerald-50 border border-emerald-200 mt-2">
+                    <div className="font-semibold text-emerald-700 mb-1">Technician Accepted</div>
+                    <div>Employee ID: <span className="font-mono">{latestAssignment.accepted_emp_id}</span></div>
+                    <div>Phone: <span className="font-mono">{latestAssignment.accepted_phone_number}</span></div>
+                  </div>
+                )}
+                {latestAssignment && latestAssignment.status === 'REJECTED' && (
+                  <div className="p-3 rounded bg-red-50 border border-red-200 mt-2">
+                    <div className="font-semibold text-red-700 mb-1">Technician Rejected</div>
+                    <div>Reason: <span className="font-mono">{latestAssignment.rejection_reason}</span></div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -416,23 +451,27 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
                 </div>
 
                 <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-600">Skills:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {provider.skills.map((skill) => (
-                        <Badge key={skill} variant="outline" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
+                  {provider && (
+                    <div>
+                      <span className="text-gray-600">Skills:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(Array.isArray(provider.skills) ? provider.skills : typeof provider.skills === 'string' ? provider.skills.split(',') : []).map((skill: string) => (
+                          <Badge key={skill} variant="outline" className="text-xs">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
-                  <div>
-                    <span className="text-gray-600">Capacity:</span>
-                    <span className="ml-1 font-medium">
-                      {provider.current_load}/{provider.capacity_per_day} tickets
-                    </span>
-                  </div>
+                  {provider && (
+                    <div>
+                      <span className="text-gray-600">Capacity:</span>
+                      <span className="ml-1 font-medium">
+                        {provider.current_load}/{provider.capacity_per_day} tickets
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {ticket.status === 'in_progress' && (
@@ -449,6 +488,70 @@ export default function TicketDetail({ ticket, onBack }: TicketDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Accept Modal */}
+      <Dialog open={showAcceptModal} onOpenChange={setShowAcceptModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Accept Ticket</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Employee ID"
+              value={acceptEmpId}
+              onChange={e => setAcceptEmpId(e.target.value)}
+              disabled={isSubmitting}
+            />
+            <Input
+              placeholder="Phone Number"
+              value={acceptPhone}
+              onChange={e => setAcceptPhone(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleAcceptTicket}
+              disabled={!acceptEmpId || !acceptPhone || isSubmitting}
+            >
+              Accept
+            </Button>
+            <Button variant="outline" onClick={() => setShowAcceptModal(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Modal */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Ticket</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Reason for rejection"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              rows={3}
+              disabled={isSubmitting}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleRejectTicket}
+              disabled={!rejectReason || isSubmitting}
+              variant="destructive"
+            >
+              Reject
+            </Button>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

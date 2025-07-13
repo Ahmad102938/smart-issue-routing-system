@@ -33,12 +33,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = CreateTicketSchema.parse(body);
 
+    // Debug: Log session user data
+    console.log('Session user:', {
+      id: session.user.id,
+      role: session.user.role,
+      associated_store_id: session.user.associated_store_id
+    });
+
+    // Validate that the store exists
+    const storeId = session.user.associated_store_id;
+    if (!storeId) {
+      return NextResponse.json({ error: 'No store associated with user' }, { status: 400 });
+    }
+
+    const store = await prisma.store.findUnique({
+      where: { id: storeId }
+    });
+
+    if (!store) {
+      console.error(`Store with ID ${storeId} not found`);
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
+
+    console.log('Found store:', { id: store.id, name: store.name });
+
     // Process ticket with AI orchestrator
     const result = await aiOrchestrator.processNewTicket({
       description: validatedData.description,
       location_in_store: validatedData.location_in_store,
       qr_asset_id: validatedData.qr_asset_id,
-      store_id: session.user.associated_entity_id!,
+      store_id: storeId,
       reporter_user_id: session.user.id
     });
 
@@ -67,9 +91,9 @@ export async function GET(request: NextRequest) {
 
     // Apply role-based filtering
     if (session.user.role === 'STORE_REGISTER') {
-      whereClause.store_id = session.user.associated_entity_id;
+      whereClause.store_id = session.user.associated_store_id;
     } else if (session.user.role === 'SERVICE_PROVIDER') {
-      whereClause.assigned_service_provider_id = session.user.associated_entity_id;
+      whereClause.assigned_service_provider_id = session.user.associated_provider_id;
     } else if (session.user.role === 'MODERATOR') {
       // Get tickets for stores moderated by this user
       const moderatedStores = await prisma.store.findMany({
@@ -99,6 +123,16 @@ export async function GET(request: NextRequest) {
         },
         assigned_provider: {
           select: { id: true, company_name: true, skills: true }
+        },
+        assignments: {
+          orderBy: { assigned_at: 'desc' },
+          take: 1,
+          select: {
+            accepted_emp_id: true,
+            accepted_phone_number: true,
+            rejection_reason: true,
+            status: true
+          }
         }
       },
       orderBy: { created_at: 'desc' }

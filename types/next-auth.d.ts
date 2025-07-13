@@ -9,7 +9,8 @@ declare module 'next-auth' {
       username: string;
       email: string;
       role: UserRole;
-      associated_entity_id?: string;
+      associated_store_id?: string;
+      associated_provider_id?: string;
       store?: Store;
       service_provider?: ServiceProvider;
     };
@@ -20,7 +21,8 @@ declare module 'next-auth' {
     username: string;
     email: string;
     role: UserRole;
-    associated_entity_id?: string;
+    associated_store_id?: string;
+    associated_provider_id?: string;
     store?: Store;
     service_provider?: ServiceProvider;
   }
@@ -29,7 +31,8 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     role: UserRole;
-    associated_entity_id?: string;
+    associated_store_id?: string;
+    associated_provider_id?: string;
     store?: Store;
     service_provider?: ServiceProvider;
   }
