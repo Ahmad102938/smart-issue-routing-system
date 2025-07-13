@@ -49,7 +49,10 @@ export async function GET(request: NextRequest) {
     const pendingProviders = await prisma.user.findMany({
       where: {
         role: 'SERVICE_PROVIDER',
-        registration_status: 'PENDING'
+        registration_status: 'PENDING',
+        service_provider: {
+          status: 'PENDING_APPROVAL'
+        }
       },
       include: {
         service_provider: true,
@@ -72,11 +75,12 @@ export async function GET(request: NextRequest) {
     const rejectedTickets = ticketStats.find(s => s.status === 'REJECTED_BY_TECH')?._count.id || 0;
     const escalatedTickets = ticketStats.find(s => s.status === 'ESCALATED')?._count.id || 0;
 
-    // Get recent activity (last 7 days)
+    // Get recent activity (last 7 days) - including tickets, escalations, and remarks
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentActivity = await prisma.ticket.findMany({
+    // Get recent tickets
+    const recentTicketsActivity = await prisma.ticket.findMany({
       where: {
         store_id: store.id,
         created_at: { gte: sevenDaysAgo }
@@ -86,8 +90,81 @@ export async function GET(request: NextRequest) {
         assigned_provider: { select: { company_name: true } }
       },
       orderBy: { created_at: 'desc' },
+      take: 10
+    });
+
+    // Get recent escalations
+    const recentEscalations = await prisma.escalation.findMany({
+      where: {
+        ticket: {
+          store_id: store.id
+        },
+        triggered_at: { gte: sevenDaysAgo }
+      },
+      include: {
+        ticket: {
+          select: { description: true, status: true }
+        },
+        escalated_to: {
+          select: { username: true }
+        }
+      },
+      orderBy: { triggered_at: 'desc' },
       take: 5
     });
+
+    // Get recent remarks
+    const recentRemarks = await prisma.remark.findMany({
+      where: {
+        ticket: {
+          store_id: store.id
+        },
+        created_at: { gte: sevenDaysAgo }
+      },
+      include: {
+        ticket: {
+          select: { description: true, status: true }
+        },
+        user: {
+          select: { username: true, role: true }
+        }
+      },
+      orderBy: { created_at: 'desc' },
+      take: 5
+    });
+
+    // Combine and sort all activities
+    const allActivities = [
+      ...recentTicketsActivity.map(ticket => ({
+        id: `ticket-${ticket.id}`,
+        type: 'ticket_created',
+        description: `New ticket: ${ticket.description}`,
+        status: ticket.status,
+        created_at: ticket.created_at,
+        reporter: ticket.reporter,
+        assigned_provider: ticket.assigned_provider,
+        priority: ticket.ai_priority
+      })),
+      ...recentEscalations.map(escalation => ({
+        id: `escalation-${escalation.id}`,
+        type: 'escalation',
+        description: `Ticket escalated: ${escalation.ticket.description}`,
+        status: escalation.status,
+        created_at: escalation.triggered_at,
+        escalated_to: escalation.escalated_to,
+        ticket_status: escalation.ticket.status
+      })),
+      ...recentRemarks.map(remark => ({
+        id: `remark-${remark.id}`,
+        type: 'remark',
+        description: `Remark added: ${remark.remark_text.substring(0, 50)}${remark.remark_text.length > 50 ? '...' : ''}`,
+        status: remark.ticket.status,
+        created_at: remark.created_at,
+        user: remark.user,
+        ticket_description: remark.ticket.description
+      }))
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10); // Take top 10 most recent activities
 
     // Get SLA compliance for this store
     const completedTicketsWithSLA = await prisma.ticket.findMany({
@@ -160,14 +237,7 @@ export async function GET(request: NextRequest) {
         assigned_provider: ticket.assigned_provider,
         latest_remark: ticket.remarks[0]
       })),
-      recentActivity: recentActivity.map(activity => ({
-        id: activity.id,
-        description: activity.description,
-        status: activity.status,
-        created_at: activity.created_at,
-        reporter: activity.reporter,
-        assigned_provider: activity.assigned_provider
-      }))
+      recentActivity: allActivities
     });
 
   } catch (error) {

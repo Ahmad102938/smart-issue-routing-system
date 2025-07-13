@@ -484,6 +484,8 @@ export default function ModeratorDashboard() {
                   <div key={activity.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-sm transition-shadow">
                     <div className="flex items-center gap-3">
                       <div className={`w-3 h-3 rounded-full ${
+                        activity.type === 'escalation' ? 'bg-orange-500' :
+                        activity.type === 'remark' ? 'bg-blue-500' :
                         activity.status === 'OPEN' ? 'bg-red-500' :
                         activity.status === 'IN_PROGRESS' ? 'bg-yellow-500' :
                         activity.status === 'COMPLETED' ? 'bg-green-500' :
@@ -493,24 +495,48 @@ export default function ModeratorDashboard() {
                       <div>
                         <h4 className="font-medium text-gray-900">{activity.description}</h4>
                         <p className="text-sm text-gray-600">
-                          Reported by {activity.reporter?.username || 'Unknown'} • {new Date(activity.created_at).toLocaleDateString()}
+                          {activity.type === 'escalation' ? (
+                            `Escalated to ${activity.escalated_to?.username || 'Unknown'} • ${new Date(activity.created_at).toLocaleDateString()}`
+                          ) : activity.type === 'remark' ? (
+                            `By ${activity.user?.username || 'Unknown'} (${activity.user?.role}) • ${new Date(activity.created_at).toLocaleDateString()}`
+                          ) : (
+                            `Reported by ${activity.reporter?.username || 'Unknown'} • ${new Date(activity.created_at).toLocaleDateString()}`
+                          )}
                         </p>
-                        {activity.assigned_provider && (
+                        {activity.type === 'ticket_created' && activity.assigned_provider && (
                           <p className="text-xs text-blue-600">
                             Assigned to {activity.assigned_provider.company_name}
+                          </p>
+                        )}
+                        {activity.type === 'remark' && (
+                          <p className="text-xs text-gray-500">
+                            Ticket: {activity.ticket_description}
                           </p>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={
+                        activity.type === 'escalation' ? 'destructive' :
+                        activity.type === 'remark' ? 'secondary' :
                         activity.status === 'OPEN' ? 'destructive' :
                         activity.status === 'IN_PROGRESS' ? 'secondary' :
                         activity.status === 'COMPLETED' ? 'default' :
                         'outline'
                       }>
-                        {activity.status}
+                        {activity.type === 'escalation' ? 'ESCALATED' :
+                         activity.type === 'remark' ? 'REMARK' :
+                         activity.status}
                       </Badge>
+                      {activity.type === 'ticket_created' && activity.priority && (
+                        <Badge variant={
+                          activity.priority === 'HIGH' ? 'destructive' :
+                          activity.priority === 'MEDIUM' ? 'secondary' :
+                          'default'
+                        }>
+                          {activity.priority}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}

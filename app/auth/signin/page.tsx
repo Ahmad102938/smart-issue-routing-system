@@ -126,24 +126,11 @@ export default function SignInPage() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <a href="/" className="text-blue-600 underline font-semibold">
                 Register here
               </a>
             </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Server running on port 3001
-            </p>
-          </div>
-
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h4 className="font-semibold text-sm text-gray-700 mb-2">Demo Accounts:</h4>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p><strong>Admin:</strong> admin / admin123</p>
-              <p><strong>Store:</strong> store_dallas / store123</p>
-              <p><strong>Technician:</strong> tech_john / tech123</p>
-              <p><strong>Moderator:</strong> mod1 / 12345678</p>
-            </div>
           </div>
         </CardContent>
       </Card>
