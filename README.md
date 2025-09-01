@@ -192,7 +192,3 @@ Agents are built with LangGraph and can be extended:
 2. Create a feature branch
 3. Implement changes with tests
 4. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
