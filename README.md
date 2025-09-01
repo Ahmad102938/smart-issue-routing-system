@@ -147,7 +147,7 @@ npx prisma generate
 - Monitor AI agent performance
 - Track SLA compliance metrics
 
-## API Documentation
+## General
 
 ### Authentication
 All API routes require authentication via NextAuth.js session or JWT token.
